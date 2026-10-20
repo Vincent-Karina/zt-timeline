@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>涨停时间轴复盘</title>
+<style>
+:root{--bg:#000;--panel:#111;--text:#fff;--muted:#bbb;--line:#333;--accent:#ffd54f;--link:#7dd3fc}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font:14px/1.45 "Segoe UI",system-ui,sans-serif}
+.wrap{max-width:880px;margin:0 auto;padding:20px 16px 48px}
+h1{margin:0 0 6px;font-size:22px;letter-spacing:.02em}
+.sub{color:var(--muted);font-size:13px;margin:0 0 20px}
+.list{display:flex;flex-direction:column;gap:10px}
+a.card{display:block;text-decoration:none;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px;transition:border-color .15s,background .15s}
+a.card:hover{border-color:#666;background:#161616}
+.date{font-size:16px;font-weight:700;color:var(--accent)}
+.summary{margin-top:6px;color:#ddd;font-size:13px}
+.meta{margin-top:8px;font-size:12px;color:var(--link)}
+.empty{color:var(--muted);padding:24px 0}
+footer{margin-top:28px;font-size:12px;color:#777}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>涨停时间轴复盘</h1>
+  <p class="sub">交易日收盘后更新 · 点日期进入当日时间×题材矩阵</p>
+  <div class="list" id="days">
+<!-- DAYS_START -->
+    <a class="card" href="days/2026-10-19.html">
+      <div class="date">2026-10-19</div>
+      <div class="summary">炸板21 · 弱封单3 · 封板46 · 东财公开接口刷新</div>
+      <div class="meta">打开当日复盘 →</div>
+    </a>
+    <a class="card" href="days/2026-10-20.html">
+      <div class="date">2026-10-20</div>
+      <div class="summary">炸板29 · 弱封单12 · 封板54 · 东财公开接口</div>
+      <div class="meta">打开当日复盘 →</div>
+    </a>
+<!-- DAYS_END -->
+  </div>
+  <footer>Friday · A 股涨停时间轴复盘</footer>
+</div>
+</body>
+</html>
