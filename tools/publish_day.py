@@ -5,8 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import shutil
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from zoom_inject import ensure_zoom
 
 ROOT = Path(__file__).resolve().parents[1]
 DAYS = ROOT / "days"
@@ -65,7 +68,7 @@ def main() -> None:
 
     DAYS.mkdir(parents=True, exist_ok=True)
     dest = DAYS / f"{args.date}.html"
-    shutil.copy2(src, dest)
+    dest.write_text(ensure_zoom(src.read_text(encoding="utf-8")), encoding="utf-8")
 
     items = [i for i in load_index() if i.get("date") != args.date]
     items.append(
