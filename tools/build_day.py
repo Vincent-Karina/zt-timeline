@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 """Build 涨停时间轴复盘 HTML — columns by 涨停逻辑 (reason_type), not industry.
 
+大列 vs 子逻辑：
+  - 列名（theme）可为视觉归并大列：消费 / 医药 / 基建（见 SUB_TO_BUCKET）。
+  - 每条记录保留 sub_logic（细逻辑）：箭头匹配与线上标签按子逻辑；
+    卡片 reason 文案仍写各自主要涨停原因，禁止只写「消费」「医药」糊弄。
+  - 同列黄实线接力：仅连共享子逻辑的票（如两只都是对台贸易 →「对台贸易接力」）；
+    禁止「同题材接力·消费/大消费/医药」等伪串线。
+  - 未入 SUB_TO_BUCKET 的细逻辑各自成列。
+
 Usage:
   python3 /workspace/zt-raw/build_day.py [--date 2026-10-21]
 
@@ -30,9 +38,9 @@ WEAK_SEAL = 30_000_000
 RAW = Path("/workspace/zt-raw")
 OUT_DIR = Path("/workspace")
 
-# (logic_name, bg, fg) — order = 列序（同类相邻；只重排不合并）
-# 列序=同类相邻：连板 → 机器人/低空 → 传媒 → 算力/数据/光通信 → 消费(益生菌/生猪/对台/商贸) → 医药拆列 → 材料/新能源 → 军工/基建/油气
-# 禁止「大消费」「医药」「基建工程」「独立逻辑」「其他」等糊桶合并列名；禁止把不同主逻辑合并成一列。
+# (logic_name, bg, fg) — order = 列序
+# 大列=视觉归并（消费/医药/基建）；细逻辑经 SUB_TO_BUCKET 映射进大列。
+# 箭头与卡片文案仍按 sub_logic；禁止列名「大消费」「独立逻辑」「其他」。
 LOGIC_PALETTE = [
     # 1 连板情绪
     ("羊字辈", "#ffd600", "#001"),
@@ -53,17 +61,10 @@ LOGIC_PALETTE = [
     ("卫星通信", "#651fff", "#fff"),
     ("安防AI", "#c6ff00", "#001"),
     ("AI设计", "#ea80fc", "#001"),
-    # 5 消费（必须相邻；禁止糊桶「大消费」）
-    ("益生菌", "#76ff03", "#001"),
-    ("生猪养殖", "#ff9100", "#001"),
-    ("对台贸易", "#ff6f00", "#001"),
-    ("商贸零售", "#ffab00", "#001"),
-    # 6 医药拆列（禁止整列「医药」）
-    ("中药创新药", "#e040fb", "#fff"),
-    ("抗癌药物", "#ea80fc", "#001"),
-    ("化学制药", "#ce93d8", "#001"),
-    ("生物医药", "#ab47bc", "#fff"),
-    ("创新药", "#f48fb1", "#001"),
+    # 5 消费大列（益生菌/生猪养殖/对台贸易/商贸零售）
+    ("消费", "#ff9100", "#001"),
+    # 6 医药大列（中药创新药/抗癌药物/化学制药/生物医药/创新药）
+    ("医药", "#e040fb", "#fff"),
     # 7 材料/新能源
     ("MLCC", "#00bfa5", "#001"),
     ("锂电重组", "#00e5ff", "#001"),
@@ -72,14 +73,42 @@ LOGIC_PALETTE = [
     ("涤纶长丝", "#80d8ff", "#001"),
     ("氯聚合物", "#26c6da", "#001"),
     ("数字能源", "#69f0ae", "#001"),
-    # 8 军工/基建/油气（基建按主逻辑拆列，禁止整列「基建工程」）
+    # 8 军工/基建/油气（基建=水泥基建+盾构风电）
     ("油气装备", "#8d6e63", "#fff"),
     ("军工装备", "#5d4037", "#fff"),
-    ("水泥基建", "#6d4c41", "#fff"),
-    ("盾构风电", "#8d6e63", "#fff"),
+    ("基建", "#6d4c41", "#fff"),
 ]
 
 LOGIC_COLOR = {n: (bg, fg) for n, bg, fg in LOGIC_PALETTE}
+
+# Fine logic → visual bucket column. Unmapped sub_logics stay as their own columns.
+SUB_TO_BUCKET = {
+    "益生菌": "消费",
+    "生猪养殖": "消费",
+    "对台贸易": "消费",
+    "商贸零售": "消费",
+    "中药创新药": "医药",
+    "抗癌药物": "医药",
+    "化学制药": "医药",
+    "生物医药": "医药",
+    "创新药": "医药",
+    "水泥基建": "基建",
+    "盾构风电": "基建",
+}
+BUCKET_NAMES = frozenset(SUB_TO_BUCKET.values())
+
+
+def apply_theme_bucket(rec: dict) -> None:
+    """Keep fine logic in sub_logic; map theme to visual bucket when applicable."""
+    sub = (rec.get("sub_logic") or rec.get("theme") or "").strip()
+    if not sub:
+        sub = "个股逻辑"
+    # If theme was already a bucket name somehow, keep prior sub_logic
+    if sub in BUCKET_NAMES and rec.get("sub_logic") and rec["sub_logic"] not in BUCKET_NAMES:
+        sub = rec["sub_logic"]
+    rec["sub_logic"] = sub
+    rec["theme"] = SUB_TO_BUCKET.get(sub, sub)
+
 
 # Hard reclass by code (2026-10-21 + reusable). theme required; optional inject_tags / zb_reason.
 CODE_OVERRIDES: dict[str, dict] = {
@@ -388,7 +417,19 @@ def match_logic_from_concepts(board_names: list[str]) -> tuple[str | None, list[
     return None, []
 
 
-FORBIDDEN_LABEL_FRAGMENTS = ("大消费", "同题材接力·其他", "同题材接力·大消费", "同题材接力·行业", "独立逻辑")
+FORBIDDEN_LABEL_FRAGMENTS = (
+    "大消费",
+    "独立逻辑",
+    "同题材接力·其他",
+    "同题材接力·大消费",
+    "同题材接力·消费",
+    "同题材接力·医药",
+    "同题材接力·基建",
+    "同题材接力·行业",
+    "消费接力",
+    "医药接力",
+    "基建接力",
+)
 
 
 def sanitize_label(s: str) -> str:
@@ -714,6 +755,7 @@ def build_records(date_compact: str, block_map: dict) -> list[dict]:
             "to": "",
         }
         apply_code_override(rec)
+        apply_theme_bucket(rec)
         records.append(rec)
 
     for x in op_items:
@@ -792,6 +834,7 @@ def build_records(date_compact: str, block_map: dict) -> list[dict]:
             "to": "",
         }
         apply_code_override(rec)
+        apply_theme_bucket(rec)
         records.append(rec)
 
     return records
@@ -821,44 +864,53 @@ def shared_tags(a: dict, b: dict) -> list[str]:
 
 
 def chain_within_logic(recs: list[dict]) -> None:
-    # Themes that must share concrete tags before yellow/orange chain (no whole-column paste)
-    REQUIRE_SHARED = set()  # 糊桶列已拆；同列仅按共享主逻辑接力
+    """Yellow/orange chain within visual columns, but only same sub_logic.
+
+    Bucket columns (消费/医药/基建) must NOT paste-chain across different
+    sub_logics (e.g. 生猪养殖 ↔ 对台贸易).
+    """
     by_theme = defaultdict(list)
     for r in recs:
         by_theme[r["theme"]].append(r)
     for th, lst in by_theme.items():
         lst.sort(key=lambda x: (x["first"], 0 if x["status"] == "zt" else 1, x["code"]))
         zts = [x for x in lst if x["status"] == "zt"]
-        need_shared = th in REQUIRE_SHARED
         for i, r in enumerate(zts):
             r["to"] = ""
             for j in range(i + 1, len(zts)):
                 nxt = zts[j]
-                if need_shared and not shared_tags(r, nxt):
+                if (r.get("sub_logic") or r["theme"]) != (nxt.get("sub_logic") or nxt["theme"]):
                     continue
                 r["to"] = nxt["code"]
                 break
         for r in lst:
             if r["status"] == "zb":
-                later = [z for z in zts if z["first"] >= r["first"]]
+                sub = r.get("sub_logic") or r["theme"]
+                later = [
+                    z for z in zts
+                    if z["first"] >= r["first"]
+                    and (z.get("sub_logic") or z["theme"]) == sub
+                ]
                 if later:
                     scored = []
                     for z in later:
                         sh = shared_tags(r, z)
-                        if need_shared and not sh:
-                            scored.append((0, z["first"], z))
-                        else:
-                            scored.append((1 if sh or z["theme"] == r["theme"] else 0, z["first"], z))
+                        scored.append((1 if sh else 0, z["first"], z))
                     scored.sort(key=lambda x: (-x[0], x[1]))
-                    best = scored[0]
-                    if need_shared and best[0] == 0:
-                        r["to"] = ""
-                    else:
-                        r["to"] = best[2]["code"]
-                elif zts and not need_shared:
-                    r["to"] = zts[-1]["code"]
+                    r["to"] = scored[0][2]["code"]
                 else:
-                    r["to"] = ""
+                    # fallback: shared concrete tags with any later zt in column
+                    later_any = [z for z in zts if z["first"] >= r["first"]]
+                    scored = []
+                    for z in later_any:
+                        sh = shared_tags(r, z)
+                        if sh:
+                            scored.append((len(sh), z["first"], z))
+                    if scored:
+                        scored.sort(key=lambda x: (-x[0], x[1]))
+                        r["to"] = scored[0][2]["code"]
+                    else:
+                        r["to"] = ""
 
 
 def build_edges(recs: list[dict]) -> list[list]:
@@ -878,17 +930,23 @@ def build_edges(recs: list[dict]) -> list[list]:
         seen.add(key)
         edges.append([a, b, sanitize_label(reason), st])
 
-    # Yellow: same-column zt chain
+    # Yellow: same-column zt chain — label by sub_logic only (never bucket paste)
     for r in recs:
         if r["status"] != "zt" or not r.get("to"):
             continue
-        th = r["theme"]
-        if any(f in th for f in FORBIDDEN_LABEL_FRAGMENTS):
+        sub = r.get("sub_logic") or r["theme"]
+        tgt = by.get(r["to"])
+        if not tgt:
             continue
-        label = f"{th}接力"
+        tsub = tgt.get("sub_logic") or tgt["theme"]
+        if sub != tsub:
+            continue  # safety: no yellow across different sub_logics
+        if sub in BUCKET_NAMES or any(f in sub for f in FORBIDDEN_LABEL_FRAGMENTS):
+            continue
+        label = f"{sub}接力"
         add(r["code"], r["to"], label, "zt")
 
-    # Orange: zb → later same-logic or shared-tag zt (skip vague 独立逻辑→独立逻辑)
+    # Orange: zb → later same-sub_logic or shared-tag zt (never bucket-name labels)
     for r in recs:
         if r["status"] != "zb" or not r.get("to"):
             continue
@@ -896,17 +954,22 @@ def build_edges(recs: list[dict]) -> list[list]:
         if not tgt:
             continue
         sh = shared_tags(r, tgt)
-        same = tgt["theme"] == r["theme"]
-        if r["theme"] == "个股逻辑" and tgt["theme"] == "个股逻辑" and not sh:
+        sub = r.get("sub_logic") or r["theme"]
+        tsub = tgt.get("sub_logic") or tgt["theme"]
+        same_sub = sub == tsub
+        if sub == "个股逻辑" and tsub == "个股逻辑" and not sh:
             continue
         if sh:
             lab = f"炸板→{'/'.join(sh[:2])}"
-        elif same and r["theme"] != "个股逻辑":
-            lab = f"炸板→{r['theme']}"
-        elif same:
+        elif same_sub and sub not in BUCKET_NAMES and sub != "个股逻辑":
+            lab = f"炸板→{sub}"
+        elif same_sub:
             continue
         else:
-            lab = f"炸板→{tgt['theme']}"
+            # cross sub_logic only when shared tags already handled above
+            if tsub in BUCKET_NAMES or tsub == "个股逻辑":
+                continue
+            lab = f"炸板→{tsub}"
         add(r["code"], r["to"], lab, "zb")
 
     # Cyan cross-column: shared secondary tags, limit ~12
@@ -1277,6 +1340,7 @@ def main():
                 "seal": r["seal"],
                 "reason": r["reason"],
                 "theme": r["theme"],
+                "sub_logic": r.get("sub_logic") or r["theme"],
                 "board": r["board"],
                 "open_num": r["open_num"],
                 "high_days": r["high_days"],
@@ -1300,8 +1364,8 @@ def main():
         print(" edge", e)
     # sample reasons
     for r in recs[:5]:
-        print(" sample", r["code"], r["name"], r["theme"], r["reason"][:80])
-    print(f"summary 炸板{zb_n} · 弱封单{wk_n} · 封板{zt_n} · 逻辑列复盘")
+        print(" sample", r["code"], r["name"], r["theme"], r.get("sub_logic"), r["reason"][:80])
+    print(f"summary 炸板{zb_n} · 弱封单{wk_n} · 封板{zt_n} · 逻辑列复盘（消费/医药/基建大列归并）")
 
 
 if __name__ == "__main__":
