@@ -31,7 +31,7 @@ RAW = Path("/workspace/zt-raw")
 OUT_DIR = Path("/workspace")
 
 # (logic_name, bg, fg) — order = column order when present
-# NOTE: never use 「大消费」「同题材接力·大消费」「同题材接力·其他」 as column/edge labels.
+# NOTE: never use 「大消费」「医药」「基建工程」「独立逻辑」「其他」 as paste-bucket column/edge labels.
 LOGIC_PALETTE = [
     ("羊字辈", "#ffd600", "#001"),
     ("人形机器人", "#ff1744", "#fff"),
@@ -48,7 +48,12 @@ LOGIC_PALETTE = [
     ("卫星通信", "#651fff", "#fff"),
     ("益生菌", "#76ff03", "#001"),
     ("生猪养殖", "#ff9100", "#001"),
-    ("医药", "#e040fb", "#fff"),
+    # 医药按主逻辑拆列，禁止整列「医药」
+    ("中药创新药", "#e040fb", "#fff"),
+    ("抗癌药物", "#ea80fc", "#001"),
+    ("化学制药", "#ce93d8", "#001"),
+    ("生物医药", "#ab47bc", "#fff"),
+    ("创新药", "#f48fb1", "#001"),
     ("对台贸易", "#ff6f00", "#001"),
     ("商贸零售", "#ffab00", "#001"),
     ("MLCC", "#00bfa5", "#001"),
@@ -60,10 +65,11 @@ LOGIC_PALETTE = [
     ("AI设计", "#ea80fc", "#001"),
     ("油气装备", "#8d6e63", "#fff"),
     ("军工装备", "#5d4037", "#fff"),
-    ("基建工程", "#6d4c41", "#fff"),
+    # 基建按主逻辑拆列，禁止整列「基建工程」
+    ("水泥基建", "#6d4c41", "#fff"),
+    ("盾构风电", "#8d6e63", "#fff"),
     ("数字能源", "#69f0ae", "#001"),
     ("安防AI", "#c6ff00", "#001"),
-    ("独立逻辑", "#78909c", "#fff"),
 ]
 LOGIC_COLOR = {n: (bg, fg) for n, bg, fg in LOGIC_PALETTE}
 
@@ -101,6 +107,16 @@ CODE_OVERRIDES: dict[str, dict] = {
     "600319": {"theme": "氯聚合物", "inject_tags": ["氯聚合物", "氯碱", "CPE"]},
     "002353": {"theme": "油气装备", "inject_tags": ["油气装备"]},
     "002535": {"theme": "军工装备", "inject_tags": ["军工", "军工装备"]},
+    # 医药拆列（禁止糊桶「医药」）
+    "000788": {"theme": "化学制药"},
+    "603351": {"theme": "化学制药", "inject_tags": ["化学制药"]},
+    "600252": {"theme": "中药创新药"},
+    "300006": {"theme": "抗癌药物"},
+    "000518": {"theme": "生物医药"},
+    "002940": {"theme": "创新药", "inject_tags": ["创新药"]},
+    # 基建拆列（禁止糊桶「基建工程」）
+    "600802": {"theme": "水泥基建"},
+    "001239": {"theme": "盾构风电"},
 }
 
 # Matchers: tag substring / synonym → logic. More specific first within each group.
@@ -129,10 +145,11 @@ TAG_TO_LOGIC = [
     ("卫星通信", ["卫星通信", "SpaceX", "卫星互联网", "商业航天"]),
     ("益生菌", ["益生菌食品", "益生菌出海", "菌株研发", "益生菌"]),
     ("生猪养殖", ["生猪养殖", "供港活猪"]),
-    ("医药", [
-        "化学制药", "中药创新药", "抗癌药物", "生物医药", "质谱诊断",
-        "体外诊断", "医药制造", "降脂复方药", "原料制剂一体化", "纳米炭铁", "创新药",
-    ]),
+    ("中药创新药", ["中药创新药", "医药制造"]),
+    ("抗癌药物", ["抗癌药物", "纳米炭铁"]),
+    ("化学制药", ["化学制药", "降脂复方药", "原料制剂一体化"]),
+    ("生物医药", ["生物医药", "长源并表", "中润老化"]),
+    ("创新药", ["创新药"]),
     ("对台贸易", ["对台贸易", "海峡两岸"]),
     ("商贸零售", ["商贸零售", "商业地产", "洗染服务"]),
     ("MLCC", ["MLCC粉体", "MLCC"]),
@@ -144,7 +161,8 @@ TAG_TO_LOGIC = [
     ("AI设计", ["AI设计", "半导体入股"]),
     ("油气装备", ["油气装备", "油气工程"]),
     ("军工装备", ["军工装备", "军工"]),
-    ("基建工程", ["水泥熟料", "盾构机", "风电锻件", "重点工程", "专业照明"]),
+    ("水泥基建", ["水泥熟料", "重点工程", "福建国资"]),
+    ("盾构风电", ["盾构机", "风电锻件"]),
     ("数字能源", ["变压器", "空冷器", "飞翼空冷器", "压缩机"]),
     ("安防AI", ["视频监控", "人工智能安防", "AI ISP", "信息安全", "网络安全大模型"]),
 ]
@@ -168,14 +186,22 @@ CONCEPT_TO_LOGIC = [
     ("氯聚合物", ["氯碱"]),
     ("涤纶长丝", ["涤纶"]),
     ("工业机器人", ["机器人概念"]),
-    ("医药", ["创新药", "化学制药", "生物医药"]),
+    ("创新药", ["创新药"]),
+    ("化学制药", ["化学制药"]),
+    ("生物医药", ["生物医药"]),
+    ("中药创新药", ["中药"]),
+    ("抗癌药物", ["抗癌"]),
 ]
 
 # Fallback keyword rules on name/hybk/reason text for zb or unmatched
 # Banned: 大消费 / broad 消费零售 / 先进材料 paste-buckets
 FALLBACK_KW = [
     ("羊字辈", ["羊"]),
-    ("医药", ["医药", "制药", "药业", "诊断"]),
+    ("中药创新药", ["中药"]),
+    ("抗癌药物", ["抗癌"]),
+    ("创新药", ["创新药"]),
+    ("化学制药", ["化学制药", "制药", "药业"]),
+    ("生物医药", ["生物医药", "生物制品"]),
     ("数据要素", ["数据", "软件", "税友", "银海", "财税", "IT服务"]),
     ("卫星通信", ["盛洋", "卫星", "航天"]),
     ("词元算力", ["算力", "词元", "Token", "数据中心"]),
@@ -191,7 +217,8 @@ FALLBACK_KW = [
     ("半导体材料", ["半导体", "氦气", "工业气体"]),
     ("油气装备", ["油气", "石油"]),
     ("军工装备", ["军工"]),
-    ("基建工程", ["水泥", "工程", "基建"]),
+    ("水泥基建", ["水泥"]),
+    ("盾构风电", ["盾构", "风电锻件"]),
     ("数字能源", ["电力", "空调", "能源"]),
     ("氯聚合物", ["氯碱", "CPE"]),
     ("涤纶长丝", ["涤纶", "化纤"]),
@@ -296,7 +323,12 @@ def fallback_logic(text: str) -> str:
         for kw in kws:
             if kw in text:
                 return logic
-    return "独立逻辑"
+    # Singleton from first token — never 「独立逻辑/其他/大消费」糊桶
+    for part in re.split(r"[+｜|\s,，/]", (text or "").strip()):
+        part = part.strip()
+        if part and part not in {"冲板未回封", "炸板"} and len(part) <= 12:
+            return part[:10]
+    return "个股逻辑"
 
 
 def specificity_rank(logic: str) -> int:
@@ -306,7 +338,8 @@ def specificity_rank(logic: str) -> int:
         "光模块材料", "卫星通信", "益生菌", "生猪养殖", "AI智能体", "AI设计",
         "MLCC", "锂电重组", "光伏BC", "半导体材料", "涤纶长丝", "氯聚合物",
         "对台贸易", "油气装备", "军工装备", "词元算力", "短剧传媒", "数据要素",
-        "工业机器人", "安防AI", "医药", "商贸零售", "数字能源", "基建工程", "独立逻辑",
+        "工业机器人", "安防AI", "中药创新药", "抗癌药物", "化学制药", "生物医药",
+        "创新药", "商贸零售", "数字能源", "水泥基建", "盾构风电",
     ]
     try:
         return len(order) - order.index(logic)
@@ -347,7 +380,7 @@ def match_logic_from_concepts(board_names: list[str]) -> tuple[str | None, list[
     return None, []
 
 
-FORBIDDEN_LABEL_FRAGMENTS = ("大消费", "同题材接力·其他", "同题材接力·大消费")
+FORBIDDEN_LABEL_FRAGMENTS = ("大消费", "同题材接力·其他", "同题材接力·大消费", "同题材接力·行业", "独立逻辑")
 
 
 def sanitize_label(s: str) -> str:
@@ -464,6 +497,21 @@ def assign_logic(
         return "AI智能体"
     if any("低空经济" in t for t in tags) and "低空经济" in cands:
         return "低空经济"
+    # 医药/基建：按具体主逻辑标签，禁止糊桶
+    if any("中药创新药" in t for t in tags) and "中药创新药" in cands:
+        return "中药创新药"
+    if any("抗癌药物" in t or "纳米炭铁" in t for t in tags) and "抗癌药物" in cands:
+        return "抗癌药物"
+    if any(t in ("化学制药", "降脂复方药") or "原料制剂" in t for t in tags) and "化学制药" in cands:
+        return "化学制药"
+    if any(t in ("生物医药", "长源并表") or "中润老化" in t for t in tags) and "生物医药" in cands:
+        return "生物医药"
+    if any(t == "创新药" or t.startswith("创新药") for t in tags) and "创新药" in cands:
+        return "创新药"
+    if any("水泥熟料" in t or "福建国资" in t for t in tags) and "水泥基建" in cands:
+        return "水泥基建"
+    if any("盾构机" in t or "风电锻件" in t for t in tags) and "盾构风电" in cands:
+        return "盾构风电"
 
     # 广电网络 → 短剧传媒 over 数据中心→词元算力
     if "短剧传媒" in cands and any(t in ("广电网络", "微短剧", "AI漫剧", "AI短剧", "出版发行") for t in tags):
@@ -710,7 +758,7 @@ def build_records(date_compact: str, block_map: dict) -> list[dict]:
         else:
             theme = assign_logic(tags, reason_type, name, hybk, "炸板", logic_freq)
             # if only weak industry tag, let concepts upgrade
-            if theme in ("独立逻辑", "基建工程") and concept_logic:
+            if theme in ("个股逻辑", "水泥基建") and concept_logic:
                 theme = concept_logic
                 for h in concept_hits:
                     if h not in tags:
@@ -766,7 +814,7 @@ def shared_tags(a: dict, b: dict) -> list[str]:
 
 def chain_within_logic(recs: list[dict]) -> None:
     # Themes that must share concrete tags before yellow/orange chain (no whole-column paste)
-    REQUIRE_SHARED = {"医药", "独立逻辑"}
+    REQUIRE_SHARED = set()  # 糊桶列已拆；同列仅按共享主逻辑接力
     by_theme = defaultdict(list)
     for r in recs:
         by_theme[r["theme"]].append(r)
@@ -841,11 +889,11 @@ def build_edges(recs: list[dict]) -> list[list]:
             continue
         sh = shared_tags(r, tgt)
         same = tgt["theme"] == r["theme"]
-        if r["theme"] == "独立逻辑" and tgt["theme"] == "独立逻辑" and not sh:
+        if r["theme"] == "个股逻辑" and tgt["theme"] == "个股逻辑" and not sh:
             continue
         if sh:
             lab = f"炸板→{'/'.join(sh[:2])}"
-        elif same and r["theme"] != "独立逻辑":
+        elif same and r["theme"] != "个股逻辑":
             lab = f"炸板→{r['theme']}"
         elif same:
             continue
