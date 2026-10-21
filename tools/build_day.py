@@ -31,35 +31,83 @@ RAW = Path("/workspace/zt-raw")
 OUT_DIR = Path("/workspace")
 
 # (logic_name, bg, fg) — order = column order when present
+# NOTE: never use 「大消费」「同题材接力·大消费」「同题材接力·其他」 as column/edge labels.
 LOGIC_PALETTE = [
     ("羊字辈", "#ffd600", "#001"),
     ("人形机器人", "#ff1744", "#fff"),
     ("工业机器人", "#ff5252", "#fff"),
     ("端侧AI", "#f50057", "#fff"),
     ("飞行汽车", "#00b0ff", "#001"),
+    ("低空经济", "#40c4ff", "#001"),
     ("短剧传媒", "#f50057", "#fff"),
     ("词元算力", "#ff6d00", "#001"),
     ("数据要素", "#eceff1", "#111"),
+    ("AI智能体", "#d500f9", "#fff"),
     ("光模块材料", "#2979ff", "#fff"),
+    ("CPO光模块", "#304ffe", "#fff"),
     ("卫星通信", "#651fff", "#fff"),
     ("益生菌", "#76ff03", "#001"),
     ("生猪养殖", "#ff9100", "#001"),
     ("医药", "#e040fb", "#fff"),
-    ("消费零售", "#ffab00", "#001"),
-    ("先进材料", "#00e5ff", "#001"),
-    ("基建工程", "#8d6e63", "#fff"),
-    ("数字能源", "#1de9b6", "#001"),
+    ("对台贸易", "#ff6f00", "#001"),
+    ("商贸零售", "#ffab00", "#001"),
+    ("MLCC", "#00bfa5", "#001"),
+    ("锂电重组", "#00e5ff", "#001"),
+    ("光伏BC", "#1de9b6", "#001"),
+    ("半导体材料", "#00bcd4", "#001"),
+    ("涤纶长丝", "#80d8ff", "#001"),
+    ("氯聚合物", "#26c6da", "#001"),
+    ("AI设计", "#ea80fc", "#001"),
+    ("油气装备", "#8d6e63", "#fff"),
+    ("军工装备", "#5d4037", "#fff"),
+    ("基建工程", "#6d4c41", "#fff"),
+    ("数字能源", "#69f0ae", "#001"),
     ("安防AI", "#c6ff00", "#001"),
     ("独立逻辑", "#78909c", "#fff"),
 ]
 LOGIC_COLOR = {n: (bg, fg) for n, bg, fg in LOGIC_PALETTE}
 
+# Hard reclass by code (2026-10-21 + reusable). theme required; optional inject_tags / zb_reason.
+CODE_OVERRIDES: dict[str, dict] = {
+    "001201": {"theme": "生猪养殖"},
+    "603629": {"theme": "词元算力"},
+    "301486": {
+        "theme": "CPO光模块",
+        "inject_tags": ["CPO概念", "光纤概念", "消费电子零部件及组装", "通信技术"],
+        "zb_reason": "CPO+光纤概念+消费电子零部件｜冲板未回封｜炸×{open_num}",
+    },
+    "002811": {"theme": "AI设计", "inject_tags": ["AI设计", "半导体入股"]},
+    "002420": {"theme": "人形机器人", "inject_tags": ["人形机器人", "机器人概念"]},
+    "605488": {"theme": "人形机器人", "inject_tags": ["人形机器人", "机器人概念"]},
+    "002355": {
+        "theme": "低空经济",
+        "inject_tags": ["低空经济", "华为概念", "算力概念", "通信技术"],
+    },
+    "000032": {"theme": "AI智能体", "inject_tags": ["AI智能体", "DeepSeek概念"]},
+    "002549": {
+        "theme": "半导体材料",
+        "inject_tags": ["工业气体", "氦气概念", "半导体概念"],
+    },
+    "002865": {"theme": "光伏BC", "inject_tags": ["BC电池", "光伏设备"]},
+    "603058": {"theme": "半导体材料", "inject_tags": ["半导体概念", "包装印刷"]},
+    "000592": {"theme": "对台贸易", "inject_tags": ["对台贸易", "福建板块"]},
+    "601566": {"theme": "对台贸易", "inject_tags": ["海峡两岸", "对台贸易"]},
+    "603696": {"theme": "对台贸易", "inject_tags": ["对台贸易"]},
+    "600838": {"theme": "商贸零售", "inject_tags": ["商贸零售", "商业地产"]},
+    "603838": {"theme": "商贸零售", "inject_tags": ["商贸零售", "家居用品"]},
+    "600293": {"theme": "锂电重组", "inject_tags": ["重大重组", "锂电电解液"]},
+    "001216": {"theme": "MLCC", "inject_tags": ["MLCC粉体", "MLCC"]},
+    "603332": {"theme": "涤纶长丝", "inject_tags": ["差别化涤纶长丝", "涤纶"]},
+    "600319": {"theme": "氯聚合物", "inject_tags": ["氯聚合物", "氯碱", "CPE"]},
+    "002353": {"theme": "油气装备", "inject_tags": ["油气装备"]},
+    "002535": {"theme": "军工装备", "inject_tags": ["军工", "军工装备"]},
+}
+
 # Matchers: tag substring / synonym → logic. More specific first within each group.
-# Assignment uses frequency + specificity + board height.
 TAG_TO_LOGIC = [
-    # specific first
     ("羊字辈", ["“羊”字辈", "羊字辈", "羊字"]),
     ("飞行汽车", ["飞行汽车"]),
+    ("低空经济", ["低空经济", "无人机"]),
     ("人形机器人", ["人形机器人", "具身机器人", "具身智能", "物理AI"]),
     ("工业机器人", ["工业机器人", "机器人传感", "机器人投资", "机器人应用", "MEMS传感"]),
     ("端侧AI", ["端侧AI", "通信模组", "无线模组"]),
@@ -73,45 +121,80 @@ TAG_TO_LOGIC = [
     ]),
     ("数据要素", [
         "数据要素", "数据库", "数字财税", "AI财税", "数据分析",
-        "云数服务", "数字政府", "政务智能体",
+        "云数服务", "数字政府", "政务智能体", "财税数字化",
     ]),
+    ("AI智能体", ["AI智能体", "DeepSeek概念", "智谱AI概念"]),
     ("光模块材料", ["光模块胶", "电子胶"]),
-    ("卫星通信", ["卫星通信", "SpaceX"]),
+    ("CPO光模块", ["CPO概念", "CPO", "光纤概念"]),
+    ("卫星通信", ["卫星通信", "SpaceX", "卫星互联网", "商业航天"]),
     ("益生菌", ["益生菌食品", "益生菌出海", "菌株研发", "益生菌"]),
     ("生猪养殖", ["生猪养殖", "供港活猪"]),
     ("医药", [
         "化学制药", "中药创新药", "抗癌药物", "生物医药", "质谱诊断",
-        "体外诊断", "医药制造", "降脂复方药", "原料制剂一体化", "纳米炭铁",
+        "体外诊断", "医药制造", "降脂复方药", "原料制剂一体化", "纳米炭铁", "创新药",
     ]),
-    ("消费零售", [
-        "复合调味品", "厨房小家电", "豆浆机", "商贸零售", "商业地产",
-        "羊毛羊绒", "男裤", "日用陶瓷", "酒器", "洗染服务", "对台贸易",
-    ]),
-    ("先进材料", [
-        "MLCC粉体", "锂电电解液", "汽车电子玻璃", "差别化涤纶长丝",
-        "仿皮草纤维", "钠电材料", "硅碳负极", "热熔胶",
-    ]),
+    ("对台贸易", ["对台贸易", "海峡两岸"]),
+    ("商贸零售", ["商贸零售", "商业地产", "洗染服务"]),
+    ("MLCC", ["MLCC粉体", "MLCC"]),
+    ("锂电重组", ["锂电电解液", "重大重组"]),
+    ("光伏BC", ["BC电池", "光伏BC"]),
+    ("半导体材料", ["工业气体", "氦气概念", "半导体概念", "光刻机"]),
+    ("涤纶长丝", ["差别化涤纶长丝", "仿皮草纤维", "涤纶"]),
+    ("氯聚合物", ["氯聚合物", "氯碱", "CPE"]),
+    ("AI设计", ["AI设计", "半导体入股"]),
+    ("油气装备", ["油气装备", "油气工程"]),
+    ("军工装备", ["军工装备", "军工"]),
     ("基建工程", ["水泥熟料", "盾构机", "风电锻件", "重点工程", "专业照明"]),
     ("数字能源", ["变压器", "空冷器", "飞翼空冷器", "压缩机"]),
     ("安防AI", ["视频监控", "人工智能安防", "AI ISP", "信息安全", "网络安全大模型"]),
 ]
 
+# Eastmoney CoreConception board name → logic (for zb with only industry hybk)
+CONCEPT_TO_LOGIC = [
+    ("人形机器人", ["人形机器人", "具身智能"]),
+    ("CPO光模块", ["CPO概念", "光纤概念"]),
+    ("低空经济", ["低空经济"]),
+    ("飞行汽车", ["飞行汽车", "eVTOL"]),
+    ("数据要素", ["数据要素", "财税数字化"]),
+    ("AI智能体", ["AI智能体", "DeepSeek概念"]),
+    ("半导体材料", ["工业气体", "氦气概念", "光刻机"]),
+    ("光伏BC", ["BC电池"]),
+    ("对台贸易", ["对台贸易", "海峡两岸"]),
+    ("MLCC", ["MLCC"]),
+    ("军工装备", ["军工"]),
+    ("油气装备", ["油气"]),
+    ("卫星通信", ["卫星通信", "卫星互联网", "商业航天", "SpaceX"]),
+    ("词元算力", ["算力概念", "英伟达概念"]),
+    ("氯聚合物", ["氯碱"]),
+    ("涤纶长丝", ["涤纶"]),
+    ("工业机器人", ["机器人概念"]),
+    ("医药", ["创新药", "化学制药", "生物医药"]),
+]
+
 # Fallback keyword rules on name/hybk/reason text for zb or unmatched
+# Banned: 大消费 / broad 消费零售 / 先进材料 paste-buckets
 FALLBACK_KW = [
     ("羊字辈", ["羊"]),
-    ("医药", ["医药", "制药", "生物", "药业", "诊断"]),
+    ("医药", ["医药", "制药", "药业", "诊断"]),
     ("数据要素", ["数据", "软件", "税友", "银海", "财税", "IT服务"]),
     ("卫星通信", ["盛洋", "卫星", "航天"]),
     ("词元算力", ["算力", "词元", "Token", "数据中心"]),
     ("短剧传媒", ["传媒", "短剧", "出版", "影视", "广电"]),
-    ("人形机器人", ["人形", "机器人"]),
+    ("人形机器人", ["人形"]),
     ("工业机器人", ["机器人", "机械"]),
-    ("端侧AI", ["模组", "通信"]),
-    ("飞行汽车", ["飞行", "低空", "eVTOL"]),
-    ("消费零售", ["食品", "家电", "零售", "服装", "家居"]),
-    ("先进材料", ["新材", "材料", "化学", "塑料", "光伏"]),
-    ("基建工程", ["水泥", "工程", "基建", "重机"]),
+    ("端侧AI", ["模组"]),
+    ("飞行汽车", ["飞行", "eVTOL"]),
+    ("低空经济", ["低空"]),
+    ("商贸零售", ["零售", "洗染"]),
+    ("对台贸易", ["对台", "海峡两岸"]),
+    ("光伏BC", ["光伏", "BC电池"]),
+    ("半导体材料", ["半导体", "氦气", "工业气体"]),
+    ("油气装备", ["油气", "石油"]),
+    ("军工装备", ["军工"]),
+    ("基建工程", ["水泥", "工程", "基建"]),
     ("数字能源", ["电力", "空调", "能源"]),
+    ("氯聚合物", ["氯碱", "CPE"]),
+    ("涤纶长丝", ["涤纶", "化纤"]),
 ]
 
 
@@ -219,14 +302,59 @@ def fallback_logic(text: str) -> str:
 def specificity_rank(logic: str) -> int:
     """Higher = more specific."""
     order = [
-        "羊字辈", "飞行汽车", "人形机器人", "端侧AI", "光模块材料", "卫星通信",
-        "益生菌", "生猪养殖", "词元算力", "短剧传媒", "数据要素", "工业机器人",
-        "安防AI", "医药", "先进材料", "数字能源", "基建工程", "消费零售", "独立逻辑",
+        "羊字辈", "飞行汽车", "低空经济", "人形机器人", "端侧AI", "CPO光模块",
+        "光模块材料", "卫星通信", "益生菌", "生猪养殖", "AI智能体", "AI设计",
+        "MLCC", "锂电重组", "光伏BC", "半导体材料", "涤纶长丝", "氯聚合物",
+        "对台贸易", "油气装备", "军工装备", "词元算力", "短剧传媒", "数据要素",
+        "工业机器人", "安防AI", "医药", "商贸零售", "数字能源", "基建工程", "独立逻辑",
     ]
     try:
         return len(order) - order.index(logic)
     except ValueError:
         return 0
+
+
+def load_concepts(date_compact: str) -> dict[str, dict]:
+    """Load cached Eastmoney CoreConception boards: {code: {boards, keys}}."""
+    p = RAW / "ths" / f"concepts_{date_compact}.json"
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def concept_board_names(concepts: dict, code: str) -> list[str]:
+    item = concepts.get(code) or {}
+    boards = item.get("boards") or []
+    return [b.get("BOARD_NAME") or "" for b in boards if b.get("BOARD_NAME")]
+
+
+def match_logic_from_concepts(board_names: list[str]) -> tuple[str | None, list[str]]:
+    """Return (logic, matched_board_names) from CoreConception boards."""
+    if not board_names:
+        return None, []
+    for logic, keys in CONCEPT_TO_LOGIC:
+        hits = []
+        for bn in board_names:
+            for k in keys:
+                if bn == k or k in bn:
+                    hits.append(bn)
+                    break
+        if hits:
+            return logic, hits
+    return None, []
+
+
+FORBIDDEN_LABEL_FRAGMENTS = ("大消费", "同题材接力·其他", "同题材接力·大消费")
+
+
+def sanitize_label(s: str) -> str:
+    out = s
+    for frag in FORBIDDEN_LABEL_FRAGMENTS:
+        out = out.replace(frag, "")
+    return out
 
 
 def board_height(high_days: str) -> int:
@@ -320,6 +448,22 @@ def assign_logic(
         return "益生菌"
     if any("生猪养殖" in t for t in tags) and "生猪养殖" in cands:
         return "生猪养殖"
+    if any("对台贸易" in t or "海峡两岸" in t for t in tags) and "对台贸易" in cands:
+        return "对台贸易"
+    if any(t in ("MLCC粉体", "MLCC") or "MLCC" in t for t in tags) and "MLCC" in cands:
+        return "MLCC"
+    if any("锂电电解液" in t or t == "重大重组" for t in tags) and "锂电重组" in cands:
+        return "锂电重组"
+    if any("差别化涤纶长丝" in t or t == "涤纶" for t in tags) and "涤纶长丝" in cands:
+        return "涤纶长丝"
+    if any("AI设计" in t or "半导体入股" in t for t in tags) and "AI设计" in cands:
+        return "AI设计"
+    if any("CPO" in t or "光纤概念" in t for t in tags) and "CPO光模块" in cands:
+        return "CPO光模块"
+    if any("AI智能体" in t or "DeepSeek" in t for t in tags) and "AI智能体" in cands:
+        return "AI智能体"
+    if any("低空经济" in t for t in tags) and "低空经济" in cands:
+        return "低空经济"
 
     # 广电网络 → 短剧传媒 over 数据中心→词元算力
     if "短剧传媒" in cands and any(t in ("广电网络", "微短剧", "AI漫剧", "AI短剧", "出版发行") for t in tags):
@@ -397,11 +541,58 @@ def badge(r):
     return "1"
 
 
+def _weak_industry_reason(reason_type: str, hybk: str) -> bool:
+    rt = (reason_type or "").strip()
+    if not rt:
+        return True
+    if "+" in rt:
+        return False
+    # single token that looks like EM industry bucket
+    if rt == (hybk or "") or rt in {
+        "消费电子", "塑料", "化学原料", "化学制品", "光伏设备", "包装印刷",
+        "林业Ⅱ", "家居用品", "专用设备", "专业工程", "汽车零部", "综合Ⅱ",
+        "光学光电", "家电零部", "IT服务Ⅱ",
+    }:
+        return True
+    return False
+
+
+def apply_code_override(rec: dict) -> None:
+    """Force theme/tags/reason for explicitly remapped codes."""
+    ov = CODE_OVERRIDES.get(rec["code"])
+    if not ov:
+        return
+    rec["theme"] = ov["theme"]
+    inject = list(ov.get("inject_tags") or [])
+    if inject:
+        seen = set()
+        merged = []
+        for t in inject + list(rec.get("tags") or []):
+            if t and t not in seen:
+                seen.add(t)
+                merged.append(t)
+        rec["tags"] = merged
+    if rec["status"] == "zb" and ov.get("zb_reason"):
+        rec["reason"] = ov["zb_reason"].format(open_num=rec.get("open_num") or 1)
+        if "｜" in rec["reason"]:
+            rec["reason_type"] = rec["reason"].split("｜")[0]
+    elif rec["status"] == "zb" and inject and _weak_industry_reason(
+        rec.get("reason_type") or "", rec.get("hybk") or ""
+    ):
+        syn = "+".join(inject[:4])
+        open_num = rec.get("open_num") or 1
+        rec["reason_type"] = syn
+        rec["reason"] = f"冲板未回封｜{syn}｜炸×{open_num}"
+    elif rec["status"] == "zt" and ov.get("zt_reason"):
+        rec["reason"] = ov["zt_reason"]
+
+
 def build_records(date_compact: str, block_map: dict) -> list[dict]:
     ths_zt = json.loads((RAW / "ths" / f"zt_pool_{date_compact}.json").read_text(encoding="utf-8"))
     ths_op = json.loads((RAW / "ths" / f"open_pool_{date_compact}.json").read_text(encoding="utf-8"))
     em_zt = {x["c"]: x for x in json.loads((RAW / f"zt_{date_compact}.json").read_text(encoding="utf-8"))["data"]["pool"]}
     em_zb = {x["c"]: x for x in json.loads((RAW / f"zb_{date_compact}.json").read_text(encoding="utf-8"))["data"]["pool"]}
+    concepts = load_concepts(date_compact)
 
     zt_items = ths_zt["data"]["info"]
     op_items = ths_op["data"]["info"]
@@ -448,26 +639,26 @@ def build_records(date_compact: str, block_map: dict) -> list[dict]:
         if open_num > 0:
             logic = logic + f"｜开板{open_num}次回封"
 
-        records.append(
-            {
-                "code": code,
-                "name": name,
-                "status": "zt",
-                "first": first,
-                "last": last,
-                "seal": seal,
-                "reason": logic,
-                "reason_type": reason_type,
-                "tags": tags,
-                "theme": theme,
-                "board": board,
-                "open_num": open_num,
-                "high_days": high_days,
-                "limit_type": lt,
-                "hybk": hybk,
-                "to": "",
-            }
-        )
+        rec = {
+            "code": code,
+            "name": name,
+            "status": "zt",
+            "first": first,
+            "last": last,
+            "seal": seal,
+            "reason": logic,
+            "reason_type": reason_type,
+            "tags": tags,
+            "theme": theme,
+            "board": board,
+            "open_num": open_num,
+            "high_days": high_days,
+            "limit_type": lt,
+            "hybk": hybk,
+            "to": "",
+        }
+        apply_code_override(rec)
+        records.append(rec)
 
     for x in op_items:
         code = x["code"]
@@ -487,44 +678,65 @@ def build_records(date_compact: str, block_map: dict) -> list[dict]:
             open_num = int(x.get("open_num") or 1)
             hybk = ""
         tags = split_tags(reason_type)
-        # Infer tags/logic for zb
+        boards = concept_board_names(concepts, code)
+        concept_logic, concept_hits = match_logic_from_concepts(boards)
+
+        # Infer tags/logic for zb — prefer THS reason_type, else CoreConception, else hybk
         if not tags:
             tip = first_sentence_reason(reason_info)
-            text = f"{name} {hybk} {tip} {bm.get('block') or ''}"
-            theme = fallback_logic(text)
-            # synthesize a short reason_type-like string
-            if tip:
-                reason_type = tip[:60]
+            if concept_hits:
+                # use precise concept boards as reason_type tags (skip ultra-generic industry)
+                prefer = [b for b in concept_hits if b not in {hybk, name}]
+                # also pull a few high-signal boards even if not the matched key
+                HIGH = (
+                    "人形机器人", "CPO概念", "光纤概念", "低空经济", "AI智能体",
+                    "DeepSeek概念", "BC电池", "工业气体", "氦气概念", "半导体概念",
+                    "军工", "数据要素", "算力概念", "卫星通信", "卫星互联网",
+                    "商业航天", "创新药", "氯碱", "消费电子零部件及组装", "通信技术",
+                )
+                extra = [b for b in boards if b in HIGH and b not in prefer]
+                syn_tags = (prefer + extra)[:4] or concept_hits[:3]
+                reason_type = "+".join(syn_tags)
+                tags = list(syn_tags)
+                theme = concept_logic or fallback_logic(f"{name} {hybk} {tip}")
             else:
-                reason_type = hybk or theme
-            tags = split_tags(reason_type) if "+" in reason_type else ([reason_type] if reason_type else [])
+                text_fb = f"{name} {hybk} {tip} {bm.get('block') or ''}"
+                theme = fallback_logic(text_fb)
+                if tip:
+                    reason_type = tip[:60]
+                else:
+                    reason_type = hybk or theme
+                tags = split_tags(reason_type) if "+" in reason_type else ([reason_type] if reason_type else [])
         else:
             theme = assign_logic(tags, reason_type, name, hybk, "炸板", logic_freq)
+            # if only weak industry tag, let concepts upgrade
+            if theme in ("独立逻辑", "基建工程") and concept_logic:
+                theme = concept_logic
+                for h in concept_hits:
+                    if h not in tags:
+                        tags.append(h)
 
         logic = f"冲板未回封｜{reason_type}｜炸×{open_num}"
-        records.append(
-            {
-                "code": code,
-                "name": name,
-                "status": "zb",
-                "first": first,
-                "last": first,
-                "seal": 0.0,
-                "reason": logic,
-                "reason_type": reason_type,
-                "tags": tags,
-                "theme": theme,
-                "board": "炸板",
-                "open_num": open_num,
-                "high_days": "炸板",
-                "limit_type": "炸板",
-                "hybk": hybk,
-                "to": "",
-            }
-        )
-
-    # Reconcile rare singleton columns: keep 独立逻辑 only when truly alone
-    # (already using named small logics — OK)
+        rec = {
+            "code": code,
+            "name": name,
+            "status": "zb",
+            "first": first,
+            "last": first,
+            "seal": 0.0,
+            "reason": logic,
+            "reason_type": reason_type,
+            "tags": tags,
+            "theme": theme,
+            "board": "炸板",
+            "open_num": open_num,
+            "high_days": "炸板",
+            "limit_type": "炸板",
+            "hybk": hybk,
+            "to": "",
+        }
+        apply_code_override(rec)
+        records.append(rec)
 
     return records
 
@@ -532,40 +744,62 @@ def build_records(date_compact: str, block_map: dict) -> list[dict]:
 def shared_tags(a: dict, b: dict) -> list[str]:
     ta = set(a.get("tags") or [])
     tb = set(b.get("tags") or [])
-    # normalize sheep
+
     def norm(t: str) -> str:
         if "羊" in t and "字" in t:
             return "羊字辈"
+        if t in ("海峡两岸", "对台贸易") or "对台" in t:
+            return "对台贸易"
+        if "CPO" in t:
+            return "CPO概念"
+        if "光纤" in t:
+            return "光纤概念"
+        if t in ("MLCC粉体", "MLCC"):
+            return "MLCC"
         return t
 
     ta = {norm(t) for t in ta}
     tb = {norm(t) for t in tb}
     common = ta & tb
-    # also theme-level secondary: if both themes different but share mapped secondary tags
     return sorted(common, key=lambda t: -len(t))
 
 
 def chain_within_logic(recs: list[dict]) -> None:
+    # Themes that must share concrete tags before yellow/orange chain (no whole-column paste)
+    REQUIRE_SHARED = {"医药", "独立逻辑"}
     by_theme = defaultdict(list)
     for r in recs:
         by_theme[r["theme"]].append(r)
     for th, lst in by_theme.items():
         lst.sort(key=lambda x: (x["first"], 0 if x["status"] == "zt" else 1, x["code"]))
         zts = [x for x in lst if x["status"] == "zt"]
+        need_shared = th in REQUIRE_SHARED
         for i, r in enumerate(zts):
-            r["to"] = zts[i + 1]["code"] if i + 1 < len(zts) else ""
+            r["to"] = ""
+            for j in range(i + 1, len(zts)):
+                nxt = zts[j]
+                if need_shared and not shared_tags(r, nxt):
+                    continue
+                r["to"] = nxt["code"]
+                break
         for r in lst:
             if r["status"] == "zb":
                 later = [z for z in zts if z["first"] >= r["first"]]
-                # prefer shared tags
                 if later:
                     scored = []
                     for z in later:
                         sh = shared_tags(r, z)
-                        scored.append((1 if sh or z["theme"] == r["theme"] else 0, z["first"], z))
+                        if need_shared and not sh:
+                            scored.append((0, z["first"], z))
+                        else:
+                            scored.append((1 if sh or z["theme"] == r["theme"] else 0, z["first"], z))
                     scored.sort(key=lambda x: (-x[0], x[1]))
-                    r["to"] = scored[0][2]["code"] if scored else ""
-                elif zts:
+                    best = scored[0]
+                    if need_shared and best[0] == 0:
+                        r["to"] = ""
+                    else:
+                        r["to"] = best[2]["code"]
+                elif zts and not need_shared:
                     r["to"] = zts[-1]["code"]
                 else:
                     r["to"] = ""
@@ -586,13 +820,15 @@ def build_edges(recs: list[dict]) -> list[list]:
         if (b, a, st) in seen and st == "x":
             return
         seen.add(key)
-        edges.append([a, b, reason, st])
+        edges.append([a, b, sanitize_label(reason), st])
 
     # Yellow: same-column zt chain
     for r in recs:
         if r["status"] != "zt" or not r.get("to"):
             continue
         th = r["theme"]
+        if any(f in th for f in FORBIDDEN_LABEL_FRAGMENTS):
+            continue
         label = f"{th}接力"
         add(r["code"], r["to"], label, "zt")
 
