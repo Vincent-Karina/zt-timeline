@@ -325,6 +325,19 @@ def board_from_high_days(high_days: str, lbc: int | None = None) -> tuple[str, s
     return hd, hd
 
 
+def plate_of(code: str) -> str:
+    """A-share exchange segment from code: 科创/创业/北证/主板."""
+    c = str(code or "").strip()
+    if c.startswith("688"):
+        return "科创"
+    if c.startswith(("300", "301")):
+        return "创业"
+    if c.startswith(("8", "4")) and len(c) == 6:
+        return "北证"
+    return "主板"
+
+
+
 def split_tags(reason_type: str | None) -> list[str]:
     if not reason_type:
         return []
@@ -748,6 +761,7 @@ def build_records(date_compact: str, block_map: dict) -> list[dict]:
             "tags": tags,
             "theme": theme,
             "board": board,
+            "plate": plate_of(code),
             "open_num": open_num,
             "high_days": high_days,
             "limit_type": lt,
@@ -827,6 +841,7 @@ def build_records(date_compact: str, block_map: dict) -> list[dict]:
             "tags": tags,
             "theme": theme,
             "board": "炸板",
+            "plate": plate_of(code),
             "open_num": open_num,
             "high_days": "炸板",
             "limit_type": "炸板",
@@ -1087,6 +1102,16 @@ def render_html(date: str, recs: list[dict], edges: list[list]) -> tuple[str, in
         f'<span class="lg"><i style="background:{bg}"></i>{th}{theme_counts[th]}</span>'
         for th, bg, fg in themes_present
     )
+    plate_counts = Counter(r.get("plate") or plate_of(r["code"]) for r in recs)
+    plate_leg = (
+        '<span class="plate-leg" title="按 A 股代码板别">'
+        f'<span class="pl"><span class="plate-main">主板</span>{plate_counts.get("主板", 0)}</span>'
+        f'<span class="pl"><span class="plate-cy">创业</span>{plate_counts.get("创业", 0)}</span>'
+        f'<span class="pl"><span class="plate-kc">科创</span>{plate_counts.get("科创", 0)}</span>'
+    )
+    if plate_counts.get("北证"):
+        plate_leg += f'<span class="pl"><span class="plate-bj">北证</span>{plate_counts.get("北证", 0)}</span>'
+    plate_leg += "</span>"
 
     th_cells = ["<th>时间</th>"]
     for th, bg, fg in themes_present:
@@ -1112,13 +1137,17 @@ def render_html(date: str, recs: list[dict], edges: list[list]) -> tuple[str, in
                     em = f'<em class="">{fmt_seal2(r["seal"])}</em>'
                 title = f'→ {name_of[r["to"]]}' if r.get("to") and r["to"] in name_of else ""
                 to = r.get("to") or ""
+                plate = r.get("plate") or plate_of(r["code"])
+                plate_cls = {"主板": "main", "创业": "cy", "科创": "kc", "北证": "bj"}.get(plate, "main")
                 parts.append(
                     f'<button type="button" class="{cls}" id="s-{r["code"]}" '
                     f'data-to="{to}" data-logic="{html_esc(r["reason"])}" '
                     f'data-name="{html_esc(r["name"])}" data-code="{r["code"]}" '
-                    f'data-meta="{html_esc(r["meta"])}" '
+                    f'data-meta="{html_esc(r["meta"])}" data-plate="{html_esc(plate)}" '
                     f'style="--bg:{bg};--fg:{fg}" title="{html_esc(title)}">'
-                    f'<b>{html_esc(r["name"])}</b><i>{badge(r)}</i>{em}</button>'
+                    f'<b>{html_esc(r["name"])}</b>'
+                    f'<span class="plate plate-{plate_cls}">{html_esc(plate)}</span>'
+                    f'<i>{badge(r)}</i>{em}</button>'
                 )
             cells.append(f'<td class="cell">{"".join(parts)}</td>')
         body_rows.append("<tr>" + "".join(cells) + "</tr>")
@@ -1150,6 +1179,18 @@ td.tm{{position:sticky;left:0;background:#222;color:#0f0;font-weight:800;z-index
 .c{{display:flex;align-items:center;gap:4px;width:100%;margin:0 0 4px;padding:5px 6px;border-radius:4px;border:2px solid #000;background:var(--bg);color:var(--fg);cursor:pointer;font:inherit;font-weight:700;box-shadow:0 0 0 1px rgba(255,255,255,.35)}}
 .c b{{flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:inherit}}
 .c i{{font-style:normal;font-size:10px;background:#000;color:#ff0;padding:0 3px;border-radius:2px}}
+.c .plate{{font-style:normal;font-size:10px;font-weight:900;padding:1px 4px;border-radius:3px;border:1px solid #fff;letter-spacing:.02em;flex-shrink:0}}
+.c .plate-main{{background:#1565c0;color:#fff}}
+.c .plate-cy{{background:#ff6d00;color:#000}}
+.c .plate-kc{{background:#aa00ff;color:#fff}}
+.c .plate-bj{{background:#546e7a;color:#fff}}
+.plate-leg{{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:4px}}
+.plate-leg .pl{{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#eee}}
+.plate-leg .pl span{{font-size:10px;font-weight:900;padding:1px 5px;border-radius:3px;border:1px solid #fff}}
+.plate-leg .pl .plate-main{{background:#1565c0;color:#fff}}
+.plate-leg .pl .plate-cy{{background:#ff6d00;color:#000}}
+.plate-leg .pl .plate-kc{{background:#aa00ff;color:#fff}}
+.plate-leg .pl .plate-bj{{background:#546e7a;color:#fff}}
 .c.zb{{border-style:dashed;border-width:2px;border-color:#000;filter:saturate(.85);opacity:.95}}
 .c.wk{{outline:3px solid #ff0;outline-offset:1px}}
 .c em{{font-style:normal;font-size:10px;background:#000;color:#fff;padding:0 3px;border-radius:2px}}
@@ -1170,8 +1211,8 @@ td.tm{{position:sticky;left:0;background:#222;color:#0f0;font-weight:800;z-index
 <div class="head">
 <h1>{date} 涨停时间轴 · 按涨停逻辑分列</h1>
 <div class="sub">封板{zt_n} · 炸板{zb_n} · 弱封单{wk_n} · 同列逻辑接力（黄实线）· 炸板关联（橙虚线）· 跨列共享逻辑（青实线）· 线上标注原因 · 数据：同花顺封板池 reason_type + 东财封单/时间</div>
-<div class="leg">{leg}</div>
-<div class="key">高对比色块 · 黄框=弱封单(&lt;3000万) · 悬停高亮相关线 · 点击看 reason_type｜高位｜板型 · 每条线中段有原因标签</div>
+<div class="leg">{leg} · 板别 {plate_leg}</div>
+<div class="key">高对比色块 · 黄框=弱封单(&lt;3000万) · 悬停高亮相关线 · 点击看 reason_type｜高位｜板型｜板别 · 每条线中段有原因标签 · 蓝徽=主板 · 橙徽=创业 · 紫徽=科创</div>
 </div>
 <div class="wrap" id="wrap">
 <div id="stage">
@@ -1275,7 +1316,8 @@ document.querySelectorAll('.c').forEach(el=>{{
   el.addEventListener('mouseleave',()=>{{ hi=null; draw(null); }});
   el.addEventListener('click',()=>{{
     document.getElementById('p-name').textContent=el.dataset.name+'（'+el.dataset.code+'）';
-    document.getElementById('p-meta').textContent=el.dataset.meta;
+    const plateTxt = el.dataset.plate ? ('板别：'+el.dataset.plate+' · ') : '';
+    document.getElementById('p-meta').textContent=plateTxt+el.dataset.meta;
     const rel = EDGES.filter(e=>e[0]===el.dataset.code || e[1]===el.dataset.code)
       .map(e=>{{
         const other = e[0]===el.dataset.code ? e[1] : e[0];
@@ -1342,6 +1384,7 @@ def main():
                 "theme": r["theme"],
                 "sub_logic": r.get("sub_logic") or r["theme"],
                 "board": r["board"],
+                "plate": r.get("plate") or plate_of(r["code"]),
                 "open_num": r["open_num"],
                 "high_days": r["high_days"],
                 "limit_type": r["limit_type"],
@@ -1365,6 +1408,8 @@ def main():
     # sample reasons
     for r in recs[:5]:
         print(" sample", r["code"], r["name"], r["theme"], r.get("sub_logic"), r["reason"][:80])
+    pc = Counter(r.get("plate") or plate_of(r["code"]) for r in recs)
+    print("plates", dict(pc))
     print(f"summary 炸板{zb_n} · 弱封单{wk_n} · 封板{zt_n} · 逻辑列复盘（消费/医药/基建大列归并）")
 
 
