@@ -13,7 +13,9 @@ h1{margin:0;font-size:16px;color:#fff}
 .lg{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#eee;font-weight:600}
 .lg i{width:12px;height:12px;border-radius:2px;border:1px solid #fff}
 .key{font-size:11px;color:#ddd;margin-top:4px}
-.wrap{overflow:auto;padding:8px;min-height:0;position:relative;background:#000}
+.wrap{overflow:auto;padding:8px;min-height:0;position:relative;background:#000;cursor:grab}
+.wrap.is-panning{cursor:grabbing;user-select:none;-webkit-user-select:none}
+.wrap.is-panning *{cursor:grabbing!important}
 #stage{position:relative;display:inline-block;min-width:100%}
 table{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;background:#111;position:relative;z-index:1}
 th,td{border:1px solid #444;padding:4px;vertical-align:top}
@@ -69,14 +71,14 @@ td.tm{position:sticky;left:0;background:#222;color:#0f0;font-weight:800;z-index:
 <h1>2026-10-21 涨停时间轴 · 按涨停逻辑分列</h1>
 <div class="sub">封板50 · 炸板19 · 弱封单13 · 同列逻辑接力（黄实线）· 炸板关联（橙虚线）· 跨列共享逻辑（青实线）· 线上标注原因 · 数据：同花顺封板池 reason_type + 东财封单/时间</div>
 <div class="leg"><span class="lg"><i style="background:#ffd600"></i>羊字辈4</span><span class="lg"><i style="background:#ff1744"></i>人形机器人5</span><span class="lg"><i style="background:#ff5252"></i>工业机器人3</span><span class="lg"><i style="background:#f50057"></i>端侧AI2</span><span class="lg"><i style="background:#00b0ff"></i>飞行汽车1</span><span class="lg"><i style="background:#40c4ff"></i>低空经济1</span><span class="lg"><i style="background:#f50057"></i>短剧传媒8</span><span class="lg"><i style="background:#ff6d00"></i>词元算力6</span><span class="lg"><i style="background:#eceff1"></i>数据要素7</span><span class="lg"><i style="background:#d500f9"></i>AI智能体1</span><span class="lg"><i style="background:#2979ff"></i>光模块材料1</span><span class="lg"><i style="background:#304ffe"></i>CPO光模块1</span><span class="lg"><i style="background:#651fff"></i>卫星通信2</span><span class="lg"><i style="background:#c6ff00"></i>安防AI1</span><span class="lg"><i style="background:#ea80fc"></i>AI设计1</span><span class="lg"><i style="background:#ff9100"></i>消费7</span><span class="lg"><i style="background:#e040fb"></i>医药6</span><span class="lg"><i style="background:#00bfa5"></i>MLCC1</span><span class="lg"><i style="background:#00e5ff"></i>锂电重组1</span><span class="lg"><i style="background:#1de9b6"></i>光伏BC1</span><span class="lg"><i style="background:#00bcd4"></i>半导体材料2</span><span class="lg"><i style="background:#80d8ff"></i>涤纶长丝1</span><span class="lg"><i style="background:#26c6da"></i>氯聚合物1</span><span class="lg"><i style="background:#69f0ae"></i>数字能源1</span><span class="lg"><i style="background:#8d6e63"></i>油气装备1</span><span class="lg"><i style="background:#5d4037"></i>军工装备1</span><span class="lg"><i style="background:#6d4c41"></i>基建2</span> · 板别 <span class="plate-leg" title="按 A 股代码板别"><span class="pl"><span class="plate-main">主板</span>62</span><span class="pl"><span class="plate-cy">创业</span>5</span><span class="pl"><span class="plate-kc">科创</span>2</span></span></div>
-<div class="key">高对比色块 · 黄框=弱封单(&lt;3000万) · 悬停高亮相关线 · 点击看 reason_type｜高位｜板型｜板别 · 每条线中段有原因标签 · 蓝徽=主板 · 橙徽=创业 · 紫徽=科创</div>
+<div class="key">高对比色块 · 黄框=弱封单(&lt;3000万) · 悬停高亮相关线 · 点击看 reason_type｜高位｜板型｜板别 · 每条线中段有原因标签 · 蓝徽=主板 · 橙徽=创业 · 紫徽=科创 · <b>按住拖动平移</b></div>
 <!-- ZOOM_BAR_START -->
 <div class="zoombar" id="zoombar">
   <button type="button" id="zoom-out" title="缩小">－ 缩小</button>
   <span id="zoom-pct" aria-live="polite" title="当前缩放比例">100%</span>
   <button type="button" id="zoom-in" title="放大">＋ 放大</button>
   <button type="button" id="zoom-reset" title="回到默认比例">重置</button>
-  <span class="zoom-hint">默认按视口宽度适配 · Ctrl/⌘+滚轮缩放 · 滚动平移</span>
+  <span class="zoom-hint">默认按视口宽度适配 · Ctrl/⌘+滚轮缩放 · 按住拖动平移</span>
 </div>
 <!-- ZOOM_BAR_END -->
 </div>
@@ -205,6 +207,55 @@ document.getElementById('mask').onclick=e=>{if(e.target.id==='mask') e.currentTa
 window.addEventListener('resize',()=>draw(hi));
 requestAnimationFrame(()=>draw(null));
 setTimeout(()=>draw(null), 100);
+/* PAN: left/middle mouse drag pans #wrap scroll; threshold keeps card clicks */
+(function(){
+  const THRESH = 5;
+  let active = false;
+  let panned = false;
+  let sx = 0, sy = 0, sl = 0, st = 0;
+  function onMove(e){
+    if(!active) return;
+    const dx = e.clientX - sx;
+    const dy = e.clientY - sy;
+    if(!panned && (Math.abs(dx) > THRESH || Math.abs(dy) > THRESH)){
+      panned = true;
+      wrap.classList.add('is-panning');
+    }
+    if(panned){
+      wrap.scrollLeft = sl - dx;
+      wrap.scrollTop = st - dy;
+      e.preventDefault();
+    }
+  }
+  function onUp(){
+    if(!active) return;
+    active = false;
+    wrap.classList.remove('is-panning');
+    window.removeEventListener('mousemove', onMove, true);
+    window.removeEventListener('mouseup', onUp, true);
+    if(panned){
+      const block = (ev)=>{
+        ev.preventDefault();
+        ev.stopPropagation();
+        wrap.removeEventListener('click', block, true);
+      };
+      wrap.addEventListener('click', block, true);
+      setTimeout(()=>wrap.removeEventListener('click', block, true), 0);
+    }
+  }
+  wrap.addEventListener('mousedown', (e)=>{
+    if(e.button !== 0 && e.button !== 1) return;
+    if(e.target.closest && e.target.closest('a,input,textarea,select,option,.zoombar,.dlg')) return;
+    active = true;
+    panned = false;
+    sx = e.clientX; sy = e.clientY;
+    sl = wrap.scrollLeft; st = wrap.scrollTop;
+    if(e.button === 1) e.preventDefault();
+    window.addEventListener('mousemove', onMove, true);
+    window.addEventListener('mouseup', onUp, true);
+  });
+  wrap.addEventListener('dragstart', (e)=>{ if(panned || active) e.preventDefault(); });
+})();
 
 /* ZOOM_JS_START */
 /* 默认比例：把矩阵自然宽度缩进视口（不超过 100%，不低于 20%）。
