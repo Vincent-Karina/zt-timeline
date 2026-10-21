@@ -1169,7 +1169,9 @@ h1{{margin:0;font-size:16px;color:#fff}}
 .lg{{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#eee;font-weight:600}}
 .lg i{{width:12px;height:12px;border-radius:2px;border:1px solid #fff}}
 .key{{font-size:11px;color:#ddd;margin-top:4px}}
-.wrap{{overflow:auto;padding:8px;min-height:0;position:relative;background:#000}}
+.wrap{{overflow:auto;padding:8px;min-height:0;position:relative;background:#000;cursor:grab}}
+.wrap.is-panning{{cursor:grabbing;user-select:none;-webkit-user-select:none}}
+.wrap.is-panning *{{cursor:grabbing!important}}
 #stage{{position:relative;display:inline-block;min-width:100%}}
 table{{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;background:#111;position:relative;z-index:1}}
 th,td{{border:1px solid #444;padding:4px;vertical-align:top}}
@@ -1212,7 +1214,7 @@ td.tm{{position:sticky;left:0;background:#222;color:#0f0;font-weight:800;z-index
 <h1>{date} 涨停时间轴 · 按涨停逻辑分列</h1>
 <div class="sub">封板{zt_n} · 炸板{zb_n} · 弱封单{wk_n} · 同列逻辑接力（黄实线）· 炸板关联（橙虚线）· 跨列共享逻辑（青实线）· 线上标注原因 · 数据：同花顺封板池 reason_type + 东财封单/时间</div>
 <div class="leg">{leg} · 板别 {plate_leg}</div>
-<div class="key">高对比色块 · 黄框=弱封单(&lt;3000万) · 悬停高亮相关线 · 点击看 reason_type｜高位｜板型｜板别 · 每条线中段有原因标签 · 蓝徽=主板 · 橙徽=创业 · 紫徽=科创</div>
+<div class="key">高对比色块 · 黄框=弱封单(&lt;3000万) · 悬停高亮相关线 · 点击看 reason_type｜高位｜板型｜板别 · 每条线中段有原因标签 · 蓝徽=主板 · 橙徽=创业 · 紫徽=科创 · <b>按住拖动平移</b></div>
 </div>
 <div class="wrap" id="wrap">
 <div id="stage">
@@ -1339,6 +1341,55 @@ document.getElementById('mask').onclick=e=>{{if(e.target.id==='mask') e.currentT
 window.addEventListener('resize',()=>draw(hi));
 requestAnimationFrame(()=>draw(null));
 setTimeout(()=>draw(null), 100);
+/* PAN: left/middle mouse drag pans #wrap scroll; threshold keeps card clicks */
+(function(){{
+  const THRESH = 5;
+  let active = false;
+  let panned = false;
+  let sx = 0, sy = 0, sl = 0, st = 0;
+  function onMove(e){{
+    if(!active) return;
+    const dx = e.clientX - sx;
+    const dy = e.clientY - sy;
+    if(!panned && (Math.abs(dx) > THRESH || Math.abs(dy) > THRESH)){{
+      panned = true;
+      wrap.classList.add('is-panning');
+    }}
+    if(panned){{
+      wrap.scrollLeft = sl - dx;
+      wrap.scrollTop = st - dy;
+      e.preventDefault();
+    }}
+  }}
+  function onUp(){{
+    if(!active) return;
+    active = false;
+    wrap.classList.remove('is-panning');
+    window.removeEventListener('mousemove', onMove, true);
+    window.removeEventListener('mouseup', onUp, true);
+    if(panned){{
+      const block = (ev)=>{{
+        ev.preventDefault();
+        ev.stopPropagation();
+        wrap.removeEventListener('click', block, true);
+      }};
+      wrap.addEventListener('click', block, true);
+      setTimeout(()=>wrap.removeEventListener('click', block, true), 0);
+    }}
+  }}
+  wrap.addEventListener('mousedown', (e)=>{{
+    if(e.button !== 0 && e.button !== 1) return;
+    if(e.target.closest && e.target.closest('a,input,textarea,select,option,.zoombar,.dlg')) return;
+    active = true;
+    panned = false;
+    sx = e.clientX; sy = e.clientY;
+    sl = wrap.scrollLeft; st = wrap.scrollTop;
+    if(e.button === 1) e.preventDefault();
+    window.addEventListener('mousemove', onMove, true);
+    window.addEventListener('mouseup', onUp, true);
+  }});
+  wrap.addEventListener('dragstart', (e)=>{{ if(panned || active) e.preventDefault(); }});
+}})();
 </script>
 </body></html>"""
     return html, zt_n, zb_n, wk_n, theme_counts
