@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>2026-10-26 涨停时间轴（指向相关标的）</title>
+<style>
+:root{--bg:#000;--panel:#0a0a0a;--text:#fff;--muted:#bbb;--line:#333}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#000;color:#fff;font:12px/1.35 "Segoe UI",system-ui,sans-serif}
+.page{height:100vh;display:grid;grid-template-rows:auto 1fr;position:relative}
+.head{padding:8px 12px;background:#111;border-bottom:2px solid #fff}
+h1{margin:0;font-size:16px;color:#fff}
+.sub{color:#ccc;font-size:11px;margin:3px 0}
+.leg{display:flex;flex-wrap:wrap;gap:6px 12px}
+.lg{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#eee;font-weight:600}
+.lg i{width:12px;height:12px;border-radius:2px;border:1px solid #fff}
+.key{font-size:11px;color:#ddd;margin-top:4px}
+.wrap{overflow:auto;padding:8px;min-height:0;position:relative;background:#000;cursor:grab}
+.wrap.is-panning{cursor:grabbing;user-select:none;-webkit-user-select:none}
+.wrap.is-panning *{cursor:grabbing!important}
+#stage{position:relative;display:inline-block;min-width:100%}
+table{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;background:#111;position:relative;z-index:1}
+th,td{border:1px solid #444;padding:4px;vertical-align:top}
+th{background:#1a1a1a;color:#fff;position:sticky;top:0;z-index:3;font-size:11px;min-width:120px;max-width:160px;border-bottom:2px solid #fff}
+th .arr{display:block;font-weight:500;color:#ff0;font-size:10px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+td.tm{position:sticky;left:0;background:#222;color:#0f0;font-weight:800;z-index:2;white-space:nowrap;min-width:48px;border-right:2px solid #0f0}
+.c{display:flex;align-items:center;gap:4px;width:100%;margin:0 0 4px;padding:5px 6px;border-radius:4px;border:2px solid #000;background:var(--bg);color:var(--fg);cursor:pointer;font:inherit;font-weight:700;box-shadow:0 0 0 1px rgba(255,255,255,.35)}
+.c b{flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:inherit}
+.c i{font-style:normal;font-size:10px;background:#000;color:#ff0;padding:0 3px;border-radius:2px}
+.c .plate{font-style:normal;font-size:10px;font-weight:900;padding:1px 4px;border-radius:3px;border:1px solid #fff;letter-spacing:.02em;flex-shrink:0}
+.c .plate-main{background:#1565c0;color:#fff}
+.c .plate-cy{background:#ff6d00;color:#000}
+.c .plate-kc{background:#aa00ff;color:#fff}
+.c .plate-bj{background:#546e7a;color:#fff}
+.plate-leg{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:4px}
+.plate-leg .pl{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#eee}
+.plate-leg .pl span{font-size:10px;font-weight:900;padding:1px 5px;border-radius:3px;border:1px solid #fff}
+.plate-leg .pl .plate-main{background:#1565c0;color:#fff}
+.plate-leg .pl .plate-cy{background:#ff6d00;color:#000}
+.plate-leg .pl .plate-kc{background:#aa00ff;color:#fff}
+.plate-leg .pl .plate-bj{background:#546e7a;color:#fff}
+.c.zb{border-style:dashed;border-width:2px;border-color:#000;filter:saturate(.85);opacity:.95}
+.c.wk{outline:3px solid #ff0;outline-offset:1px}
+.c em{font-style:normal;font-size:10px;background:#000;color:#fff;padding:0 3px;border-radius:2px}
+.c em.r{background:#ff0;color:#000;font-weight:900}
+.c:hover{filter:brightness(1.15);z-index:5}
+#arrows{position:absolute;left:0;top:0;pointer-events:none;z-index:4;overflow:visible}
+.mask{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:40;padding:16px}
+.mask.on{display:flex}
+.dlg{width:min(440px,100%);background:#1a1a1a;border:2px solid #fff;border-radius:8px;padding:14px}
+.dlg h2{margin:0 0 4px;font-size:15px;color:#fff}
+.dlg .meta{color:#ff0;font-size:11px;margin-bottom:8px}
+.dlg .logic{background:#000;border:1px solid #555;border-radius:6px;padding:10px;line-height:1.55;white-space:pre-wrap;color:#eee}
+.dlg button{margin-top:10px;width:100%;padding:8px;border:0;border-radius:6px;background:#ff0;color:#000;font-weight:800;cursor:pointer}
+
+.edge-lab{font:10px/1.2 "Segoe UI",system-ui,sans-serif;fill:#fff;paint-order:stroke;stroke:#000;stroke-width:3px;stroke-linejoin:round;pointer-events:none}
+
+/* ZOOM_CSS_START */
+.zoombar{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:6px;border-top:1px solid #333;flex-wrap:wrap}
+.zoombar button{appearance:none;background:#ff0;color:#000;border:2px solid #fff;border-radius:6px;font:inherit;font-weight:900;font-size:14px;cursor:pointer;min-height:36px;padding:4px 12px;line-height:1.1}
+.zoombar button:hover{filter:brightness(1.06)}
+.zoombar button:disabled{opacity:.35;cursor:default;filter:none}
+.zoombar button:focus-visible{outline:2px solid #0ff;outline-offset:2px}
+#zoom-pct{min-width:64px;text-align:center;font-weight:900;color:#ff0;font-size:16px;font-variant-numeric:tabular-nums;background:#000;border:1px solid #888;border-radius:6px;padding:6px 8px}
+.zoom-hint{color:#ccc;font-size:11px;font-weight:600}
+#stage.is-scaled{min-width:0}
+#stage.is-scaled > table{min-width:max-content;width:max-content}
+.wrap{touch-action:pan-x pan-y}
+/* ZOOM_CSS_END */
+</style></head><body>
+<div class="page">
+<div class="head">
+<h1>2026-10-26 涨停时间轴 · 按涨停逻辑分列</h1>
+<div class="sub">封板55 · 炸板23 · 弱封单12 · 同列逻辑接力（黄实线）· 炸板关联（橙虚线）· 跨列共享逻辑（青实线）· 线上标注原因 · 数据：同花顺封板池 reason_type + 东财封单/时间</div>
+<div class="leg"><span class="lg"><i style="background:#ffd600"></i>羊字辈4</span><span class="lg"><i style="background:#ff1744"></i>人形机器人18</span><span class="lg"><i style="background:#ff5252"></i>工业机器人18</span><span class="lg"><i style="background:#40c4ff"></i>低空经济5</span><span class="lg"><i style="background:#f50057"></i>短剧传媒2</span><span class="lg"><i style="background:#ff6d00"></i>词元算力1</span><span class="lg"><i style="background:#eceff1"></i>数据要素7</span><span class="lg"><i style="background:#d500f9"></i>AI智能体2</span><span class="lg"><i style="background:#ff9100"></i>消费4</span><span class="lg"><i style="background:#26c6da"></i>氯聚合物1</span><span class="lg"><i style="background:#5d4037"></i>军工装备1</span><span class="lg"><i style="background:#78909c"></i>奥创引擎1</span><span class="lg"><i style="background:#78909c"></i>光通信重组1</span><span class="lg"><i style="background:#78909c"></i>AI游戏1</span><span class="lg"><i style="background:#78909c"></i>三季报单季增长1</span><span class="lg"><i style="background:#78909c"></i>休闲食品2</span><span class="lg"><i style="background:#78909c"></i>乳制品1</span><span class="lg"><i style="background:#78909c"></i>AI应用1</span><span class="lg"><i style="background:#78909c"></i>高血压疫苗1</span><span class="lg"><i style="background:#78909c"></i>回购1</span><span class="lg"><i style="background:#78909c"></i>物料输送设备1</span><span class="lg"><i style="background:#78909c"></i>饼干食品1</span><span class="lg"><i style="background:#78909c"></i>白酒1</span><span class="lg"><i style="background:#78909c"></i>水暖阀门1</span><span class="lg"><i style="background:#78909c"></i>招商蛇口1</span> · 板别 <span class="plate-leg" title="按 A 股代码板别"><span class="pl"><span class="plate-main">主板</span>65</span><span class="pl"><span class="plate-cy">创业</span>8</span><span class="pl"><span class="plate-kc">科创</span>5</span></span></div>
+<div class="key">高对比色块 · 黄框=弱封单(&lt;3000万) · 悬停高亮相关线 · 点击看 reason_type｜高位｜板型｜板别 · 每条线中段有原因标签 · 蓝徽=主板 · 橙徽=创业 · 紫徽=科创 · <b>按住拖动平移</b></div>
+<!-- ZOOM_BAR_START -->
+<div class="zoombar" id="zoombar">
+  <button type="button" id="zoom-out" title="缩小">－ 缩小</button>
+  <span id="zoom-pct" aria-live="polite" title="当前缩放比例">100%</span>
+  <button type="button" id="zoom-in" title="放大">＋ 放大</button>
+  <button type="button" id="zoom-reset" title="回到默认比例">重置</button>
+  <span class="zoom-hint">默认按视口宽度适配 · Ctrl/⌘+滚轮缩放 · 按住拖动平移</span>
+</div>
+<!-- ZOOM_BAR_END -->
+</div>
+<div class="wrap" id="wrap">
+<div id="stage">
+<svg id="arrows" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0 0 L10 5 L0 10 z" fill="#ffea00"/>
+</marker>
+<marker id="ahz" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0 0 L10 5 L0 10 z" fill="#ff9100"/>
+</marker>
+<marker id="ahx" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0 0 L10 5 L0 10 z" fill="#00e5ff"/>
+</marker>
+</defs>
+</svg>
+<table id="grid"><thead><tr><th>时间</th><th style="border-top:4px solid #ffd600">羊字辈<span class='arr'>大西洋 → 东方海洋 → 百洋股份</span></th><th style="border-top:4px solid #ff1744">人形机器人<span class='arr'>多伦科技 → 杰克科技 → 福莱新材</span></th><th style="border-top:4px solid #ff5252">工业机器人<span class='arr'>华阳智能 → 正裕工业 → 赛福天</span></th><th style="border-top:4px solid #40c4ff">低空经济<span class='arr'>大名城 → — → —</span></th><th style="border-top:4px solid #f50057">短剧传媒<span class='arr'>南方传媒 → — → —</span></th><th style="border-top:4px solid #ff6d00">词元算力<span class='arr'>上海洗霸 → — → —</span></th><th style="border-top:4px solid #eceff1">数据要素<span class='arr'>延华智能 → 海量数据 → 上海物贸</span></th><th style="border-top:4px solid #d500f9">AI智能体<span class='arr'>南方路机 → 盛通股份 → —</span></th><th style="border-top:4px solid #ff9100">消费<span class='arr'>上海九百 → — → —</span></th><th style="border-top:4px solid #26c6da">氯聚合物<span class='arr'>英力特 → — → —</span></th><th style="border-top:4px solid #5d4037">军工装备<span class='arr'>林州重机 → — → —</span></th><th style="border-top:4px solid #78909c">奥创引擎<span class='arr'>奥雅股份 → — → —</span></th><th style="border-top:4px solid #78909c">光通信重组<span class='arr'>科瑞思 → — → —</span></th><th style="border-top:4px solid #78909c">AI游戏<span class='arr'>电魂网络 → — → —</span></th><th style="border-top:4px solid #78909c">三季报单季增长<span class='arr'>英特集团 → — → —</span></th><th style="border-top:4px solid #78909c">休闲食品<span class='arr'>良品铺子 → 桂发祥 → —</span></th><th style="border-top:4px solid #78909c">乳制品<span class='arr'>阳光乳业 → — → —</span></th><th style="border-top:4px solid #78909c">AI应用<span class='arr'>国脉科技 → — → —</span></th><th style="border-top:4px solid #78909c">高血压疫苗<span class='arr'>塞力医疗 → — → —</span></th><th style="border-top:4px solid #78909c">回购<span class='arr'>达瑞电子 → — → —</span></th><th style="border-top:4px solid #78909c">物料输送设备<span class='arr'>和泰机电 → — → —</span></th><th style="border-top:4px solid #78909c">饼干食品<span class='arr'>青岛食品 → — → —</span></th><th style="border-top:4px solid #78909c">白酒<span class='arr'>皇台酒业 → — → —</span></th><th style="border-top:4px solid #78909c">水暖阀门<span class='arr'>永和智控 → — → —</span></th><th style="border-top:4px solid #78909c">招商蛇口<span class='arr'>招商蛇口 → — → —</span></th></tr></thead><tbody>
+<tr><td class="tm">09:25</td><td class="cell"></td><td class="cell"><button type="button" class="c zb" id="s-002009" data-to="603528" data-logic="冲板未回封｜人形机器人｜炸×1" data-name="天奇股份" data-code="002009" data-meta="→多伦科技 · 开1 · 09:25" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title="→ 多伦科技"><b>天奇股份</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button><button type="button" class="c zb" id="s-002354" data-to="603528" data-logic="冲板未回封｜人形机器人+DeepSeek概念+AI智能体+数据要素｜炸×4" data-name="天娱数科" data-code="002354" data-meta="→多伦科技 · 开4 · 09:25" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title="→ 多伦科技"><b>天娱数科</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button><button type="button" class="c zb" id="s-603933" data-to="603528" data-logic="冲板未回封｜人形机器人+半导体概念｜炸×1" data-name="睿能科技" data-code="603933" data-meta="→多伦科技 · 开1 · 09:25" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title="→ 多伦科技"><b>睿能科技</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button><button type="button" class="c zt" id="s-603528" data-to="603337" data-logic="人形机器人+服务机器人+智慧交通｜3天3板｜一字板" data-name="多伦科技" data-code="603528" data-meta="→杰克科技 · 一字板 · 3天3板 · 09:25" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title="→ 杰克科技"><b>多伦科技</b><span class="plate plate-main">主板</span><i>3板</i><em class="">3.55亿</em></button><button type="button" class="c zb" id="s-603081" data-to="603528" data-logic="冲板未回封｜人形机器人｜炸×3" data-name="大丰实业" data-code="603081" data-meta="→多伦科技 · 开3 · 09:25" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title="→ 多伦科技"><b>大丰实业</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button></td><td class="cell"><button type="button" class="c zt wk" id="s-301502" data-to="603028" data-logic="机器人关节模组+无框电机+微特电机｜3天3板｜T字板｜开板5次回封" data-name="华阳智能" data-code="301502" data-meta="→赛福天 · T字板 · 3天3板 · 开5 · 09:25→15:00" data-plate="创业" style="--bg:#ff5252;--fg:#fff" title="→ 赛福天"><b>华阳智能</b><span class="plate plate-cy">创业</span><i>3板</i><em class="r">146万 弱</em></button><button type="button" class="c zt" id="s-603028" data-to="603089" data-logic="机器人腱绳+特种钢索｜3天3板｜一字板" data-name="赛福天" data-code="603028" data-meta="→正裕工业 · 一字板 · 3天3板 · 09:25" data-plate="主板" style="--bg:#ff5252;--fg:#fff" title="→ 正裕工业"><b>赛福天</b><span class="plate plate-main">主板</span><i>3板</i><em class="">2.89亿</em></button><button type="button" class="c zt" id="s-603089" data-to="600826" data-logic="机器人零部件+柔性触觉+汽车减震器｜3天3板｜一字板" data-name="正裕工业" data-code="603089" data-meta="→兰生股份 · 一字板 · 3天3板 · 09:25" data-plate="主板" style="--bg:#ff5252;--fg:#fff" title="→ 兰生股份"><b>正裕工业</b><span class="plate plate-main">主板</span><i>3板</i><em class="">3226万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-600838" data-to="" data-logic="商贸零售+商业地产+洗染服务｜4天4板｜T字板｜开板1次回封" data-name="上海九百" data-code="600838" data-meta="T字板 · 4天4板 · 开1 · 09:25→09:30" data-plate="主板" style="--bg:#ff9100;--fg:#001" title=""><b>上海九百</b><span class="plate plate-main">主板</span><i>4板</i><em class="">1.36亿</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-301314" data-to="" data-logic="光通信重组+磁性元器件｜首板｜一字板" data-name="科瑞思" data-code="301314" data-meta="一字板 · 首板 · 09:25" data-plate="创业" style="--bg:#78909c;--fg:#fff" title=""><b>科瑞思</b><span class="plate plate-cy">创业</span><i>1</i><em class="">7776万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">09:30</td><td class="cell"><button type="button" class="c zt" id="s-600558" data-to="002086" data-logic="高端焊材+核聚变焊材+航空航天+“羊”字辈｜首板｜换手板" data-name="大西洋" data-code="600558" data-meta="→东方海洋 · 换手板 · 首板 · 09:31" data-plate="主板" style="--bg:#ffd600;--fg:#001" title="→ 东方海洋"><b>大西洋</b><span class="plate plate-main">主板</span><i>1</i><em class="">8507万</em></button></td><td class="cell"><button type="button" class="c zt" id="s-603337" data-to="605488" data-logic="人形机器人+数字成套+工业缝纫机｜2天2板｜一字板" data-name="杰克科技" data-code="603337" data-meta="→福莱新材 · 一字板 · 2天2板 · 09:30" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title="→ 福莱新材"><b>杰克科技</b><span class="plate plate-main">主板</span><i>2板</i><em class="">2.45亿</em></button><button type="button" class="c zt" id="s-605488" data-to="002708" data-logic="数据采集手套+机器人触觉+广告喷墨｜6天4板｜换手板｜开板2次回封" data-name="福莱新材" data-code="605488" data-meta="→光洋股份 · 换手板 · 6天4板 · 开2 · 09:30→10:19" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title="→ 光洋股份"><b>福莱新材</b><span class="plate plate-main">主板</span><i>4板</i><em class="">1.07亿</em></button><button type="button" class="c zt" id="s-002708" data-to="000559" data-logic="人形机器人+PCB+汽车零部件｜首板｜换手板｜开板5次回封" data-name="光洋股份" data-code="002708" data-meta="→万向钱潮 · 换手板 · 首板 · 开5 · 09:30→09:53" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title="→ 万向钱潮"><b>光洋股份</b><span class="plate plate-main">主板</span><i>1</i><em class="">8657万</em></button><button type="button" class="c zb" id="s-603278" data-to="000559" data-logic="冲板未回封｜人形机器人｜炸×11" data-name="大业股份" data-code="603278" data-meta="→万向钱潮 · 开11 · 09:31" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title="→ 万向钱潮"><b>大业股份</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button><button type="button" class="c zt" id="s-000559" data-to="603331" data-logic="人形机器人+汽车零部件｜2天2板｜换手板｜开板2次回封" data-name="万向钱潮" data-code="000559" data-meta="→百达精工 · 换手板 · 2天2板 · 开2 · 09:32→11:07" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title="→ 百达精工"><b>万向钱潮</b><span class="plate plate-main">主板</span><i>2板</i><em class="">1.42亿</em></button><button type="button" class="c zt wk" id="s-603331" data-to="000810" data-logic="人形机器人+银河通用+汽车零部件｜首板｜换手板｜开板9次回封" data-name="百达精工" data-code="603331" data-meta="→创维数字 · 换手板 · 首板 · 开9 · 09:33→13:40" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title="→ 创维数字"><b>百达精工</b><span class="plate plate-main">主板</span><i>1</i><em class="r">1633万 弱</em></button><button type="button" class="c zt" id="s-000810" data-to="000700" data-logic="具身智能数据采集+智能终端+谷歌合作｜2天2板｜换手板｜开板3次回封" data-name="创维数字" data-code="000810" data-meta="→模塑科技 · 换手板 · 2天2板 · 开3 · 09:33→09:49" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title="→ 模塑科技"><b>创维数字</b><span class="plate plate-main">主板</span><i>2板</i><em class="">1.29亿</em></button></td><td class="cell"><button type="button" class="c zb" id="s-603677" data-to="002931" data-logic="冲板未回封｜机器人概念｜炸×2" data-name="奇精机械" data-code="603677" data-meta="→锋龙股份 · 开2 · 09:30" data-plate="主板" style="--bg:#ff5252;--fg:#fff" title="→ 锋龙股份"><b>奇精机械</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button><button type="button" class="c zt" id="s-600826" data-to="000678" data-logic="机器人展区+AI科技+会展服务｜首板｜换手板｜开板1次回封" data-name="兰生股份" data-code="600826" data-meta="→襄阳轴承 · 换手板 · 首板 · 开1 · 09:30→09:31" data-plate="主板" style="--bg:#ff5252;--fg:#fff" title="→ 襄阳轴承"><b>兰生股份</b><span class="plate plate-main">主板</span><i>1</i><em class="">6711万</em></button><button type="button" class="c zt" id="s-000678" data-to="002578" data-logic="机器人轴承+汽车轴承｜3天3板｜换手板｜开板5次回封" data-name="襄阳轴承" data-code="000678" data-meta="→闽发铝业 · 换手板 · 3天3板 · 开5 · 09:31→10:20" data-plate="主板" style="--bg:#ff5252;--fg:#fff" title="→ 闽发铝业"><b>襄阳轴承</b><span class="plate plate-main">主板</span><i>3板</i><em class="">1.08亿</em></button><button type="button" class="c zt wk" id="s-002578" data-to="300916" data-logic="机器人布局+液冷铝材+工业铝型材｜首板｜换手板｜开板2次回封" data-name="闽发铝业" data-code="002578" data-meta="→朗特智能 · 换手板 · 首板 · 开2 · 09:32→10:41" data-plate="主板" style="--bg:#ff5252;--fg:#fff" title="→ 朗特智能"><b>闽发铝业</b><span class="plate plate-main">主板</span><i>1</i><em class="r">611万 弱</em></button><button type="button" class="c zt" id="s-300916" data-to="600980" data-logic="光通信收购+智能控制器+机器人｜首板｜换手板" data-name="朗特智能" data-code="300916" data-meta="→北矿科技 · 换手板 · 首板 · 09:33" data-plate="创业" style="--bg:#ff5252;--fg:#fff" title="→ 北矿科技"><b>朗特智能</b><span class="plate plate-cy">创业</span><i>1</i><em class="">4095万</em></button><button type="button" class="c zt" id="s-600980" data-to="603657" data-logic="矿冶机器人+三季报增长｜首板｜换手板" data-name="北矿科技" data-code="600980" data-meta="→春光科技 · 换手板 · 首板 · 09:33" data-plate="主板" style="--bg:#ff5252;--fg:#fff" title="→ 春光科技"><b>北矿科技</b><span class="plate plate-main">主板</span><i>1</i><em class="">3452万</em></button><button type="button" class="c zt wk" id="s-603657" data-to="688648" data-logic="家庭机器人+清洁电器+品牌客户｜首板｜换手板｜开板3次回封" data-name="春光科技" data-code="603657" data-meta="→中邮科技 · 换手板 · 首板 · 开3 · 09:33→10:03" data-plate="主板" style="--bg:#ff5252;--fg:#fff" title="→ 中邮科技"><b>春光科技</b><span class="plate plate-main">主板</span><i>1</i><em class="r">1076万 弱</em></button></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-601900" data-to="" data-logic="三季报增长+出版发行+AI教育+AI影视｜首板｜换手板｜开板2次回封" data-name="南方传媒" data-code="601900" data-meta="换手板 · 首板 · 开2 · 09:30→10:00" data-plate="主板" style="--bg:#f50057;--fg:#fff" title=""><b>南方传媒</b><span class="plate plate-main">主板</span><i>1</i><em class="">7744万</em></button></td><td class="cell"></td><td class="cell"><button type="button" class="c zb" id="s-002474" data-to="002178" data-logic="冲板未回封｜IT服务Ⅱ｜炸×1" data-name="榕基软件" data-code="002474" data-meta="→延华智能 · 开1 · 09:30" data-plate="主板" style="--bg:#eceff1;--fg:#111" title="→ 延华智能"><b>榕基软件</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button><button type="button" class="c zt" id="s-002178" data-to="603138" data-logic="AI医疗+智慧城市+医院智能化｜首板｜换手板" data-name="延华智能" data-code="002178" data-meta="→海量数据 · 换手板 · 首板 · 09:34" data-plate="主板" style="--bg:#eceff1;--fg:#111" title="→ 海量数据"><b>延华智能</b><span class="plate plate-main">主板</span><i>1</i><em class="">5973万</em></button></td><td class="cell"><button type="button" class="c zb" id="s-603280" data-to="" data-logic="冲板未回封｜DeepSeek概念+跨境电商｜炸×3" data-name="南方路机" data-code="603280" data-meta="开3 · 09:30" data-plate="主板" style="--bg:#d500f9;--fg:#fff" title=""><b>南方路机</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button></td><td class="cell"><button type="button" class="c zb" id="s-600785" data-to="" data-logic="冲板未回封｜一般零售｜炸×1" data-name="新华百货" data-code="600785" data-meta="开1 · 09:33" data-plate="主板" style="--bg:#ff9100;--fg:#001" title=""><b>新华百货</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button><button type="button" class="c zb" id="s-603886" data-to="" data-logic="冲板未回封｜电商概念｜炸×3" data-name="元祖股份" data-code="603886" data-meta="开3 · 09:34" data-plate="主板" style="--bg:#ff9100;--fg:#001" title=""><b>元祖股份</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-002535" data-to="" data-logic="机器人+煤矿机械+军工配套｜7天4板｜换手板｜开板1次回封" data-name="林州重机" data-code="002535" data-meta="换手板 · 7天4板 · 开1 · 09:31→13:18" data-plate="主板" style="--bg:#5d4037;--fg:#fff" title=""><b>林州重机</b><span class="plate plate-main">主板</span><i>4板</i><em class="">3697万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt wk" id="s-001219" data-to="" data-logic="饼干食品+三季报增长+渠道拓展｜首板｜换手板｜开板1次回封" data-name="青岛食品" data-code="001219" data-meta="换手板 · 首板 · 开1 · 09:30→09:31" data-plate="主板" style="--bg:#78909c;--fg:#fff" title=""><b>青岛食品</b><span class="plate plate-main">主板</span><i>1</i><em class="r">2676万 弱</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">09:35</td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zb" id="s-003009" data-to="600094" data-logic="冲板未回封｜低空经济+商业航天+半导体概念+军工｜炸×2" data-name="中天火箭" data-code="003009" data-meta="→大名城 · 开2 · 09:36" data-plate="主板" style="--bg:#40c4ff;--fg:#001" title="→ 大名城"><b>中天火箭</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button><button type="button" class="c zb" id="s-603007" data-to="600094" data-logic="冲板未回封｜低空经济+半导体概念｜炸×2" data-name="顺景科技" data-code="603007" data-meta="→大名城 · 开2 · 09:38" data-plate="主板" style="--bg:#40c4ff;--fg:#001" title="→ 大名城"><b>顺景科技</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button></td><td class="cell"><button type="button" class="c zb" id="s-603721" data-to="" data-logic="冲板未回封｜影视院线｜炸×1" data-name="中广天择" data-code="603721" data-meta="开1 · 09:35" data-plate="主板" style="--bg:#f50057;--fg:#fff" title=""><b>中广天择</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">09:40</td><td class="cell"><button type="button" class="c zt" id="s-002086" data-to="002696" data-logic="质谱诊断+体外诊断+海参养殖+“羊”字辈｜4天2板｜换手板｜开板1次回封" data-name="东方海洋" data-code="002086" data-meta="→百洋股份 · 换手板 · 4天2板 · 开1 · 09:42→10:01" data-plate="主板" style="--bg:#ffd600;--fg:#001" title="→ 百洋股份"><b>东方海洋</b><span class="plate plate-main">主板</span><i>2板</i><em class="">5211万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">09:45</td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zb" id="s-301015" data-to="002931" data-logic="冲板未回封｜机器人概念+跨境电商+创新药｜炸×1" data-name="百洋医药" data-code="301015" data-meta="→锋龙股份 · 开1 · 09:47" data-plate="创业" style="--bg:#ff5252;--fg:#fff" title="→ 锋龙股份"><b>百洋医药</b><span class="plate plate-cy">创业</span><i>炸</i><em class="r">炸</em></button><button type="button" class="c zt" id="s-688648" data-to="001331" data-logic="机器人+智能物流+无人车｜首板｜换手板｜开板1次回封" data-name="中邮科技" data-code="688648" data-meta="→胜通能源 · 换手板 · 首板 · 开1 · 09:49→09:53" data-plate="科创" style="--bg:#ff5252;--fg:#fff" title="→ 胜通能源"><b>中邮科技</b><span class="plate plate-kc">科创</span><i>1</i><em class="">7455万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt wk" id="s-000411" data-to="" data-logic="三季报单季增长+医药流通+医药物流｜首板｜换手板｜开板2次回封" data-name="英特集团" data-code="000411" data-meta="换手板 · 首板 · 开2 · 09:49→09:52" data-plate="主板" style="--bg:#78909c;--fg:#fff" title=""><b>英特集团</b><span class="plate plate-main">主板</span><i>1</i><em class="r">1534万 弱</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt wk" id="s-603716" data-to="" data-logic="高血压疫苗+AI诊断+医疗SPD｜首板｜换手板｜开板1次回封" data-name="塞力医疗" data-code="603716" data-meta="换手板 · 首板 · 开1 · 09:45→10:32" data-plate="主板" style="--bg:#78909c;--fg:#fff" title=""><b>塞力医疗</b><span class="plate plate-main">主板</span><i>1</i><em class="r">1477万 弱</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">09:50</td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zb" id="s-002599" data-to="" data-logic="冲板未回封｜DeepSeek概念+跨境电商｜炸×2" data-name="盛通股份" data-code="002599" data-meta="开2 · 09:52" data-plate="主板" style="--bg:#d500f9;--fg:#fff" title=""><b>盛通股份</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">09:55</td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-002795" data-to="" data-logic="水暖阀门+肿瘤放疗+资产出售｜首板｜换手板｜开板1次回封" data-name="永和智控" data-code="002795" data-meta="换手板 · 首板 · 开1 · 09:58→09:59" data-plate="主板" style="--bg:#78909c;--fg:#fff" title=""><b>永和智控</b><span class="plate plate-main">主板</span><i>1</i><em class="">5479万</em></button></td><td class="cell"></td></tr><tr><td class="tm">10:00</td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zb" id="s-688228" data-to="600822" data-logic="冲板未回封｜财税数字化+数据要素+DeepSeek概念｜炸×6" data-name="开普云" data-code="688228" data-meta="→上海物贸 · 开6 · 10:01" data-plate="科创" style="--bg:#eceff1;--fg:#111" title="→ 上海物贸"><b>开普云</b><span class="plate plate-kc">科创</span><i>炸</i><em class="r">炸</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-001225" data-to="" data-logic="物料输送设备+海外拓展+输送链｜首板｜换手板" data-name="和泰机电" data-code="001225" data-meta="换手板 · 首板 · 10:04" data-plate="主板" style="--bg:#78909c;--fg:#fff" title=""><b>和泰机电</b><span class="plate plate-main">主板</span><i>1</i><em class="">4633万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">10:05</td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-000995" data-to="" data-logic="白酒+老窖池+葡萄酒｜首板｜换手板｜开板2次回封" data-name="皇台酒业" data-code="000995" data-meta="换手板 · 首板 · 开2 · 10:08→13:33" data-plate="主板" style="--bg:#78909c;--fg:#fff" title=""><b>皇台酒业</b><span class="plate plate-main">主板</span><i>1</i><em class="">4287万</em></button></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">10:10</td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-603719" data-to="002820" data-logic="休闲食品+一品一链+业绩扭亏｜首板｜换手板" data-name="良品铺子" data-code="603719" data-meta="→桂发祥 · 换手板 · 首板 · 10:11" data-plate="主板" style="--bg:#78909c;--fg:#fff" title="→ 桂发祥"><b>良品铺子</b><span class="plate plate-main">主板</span><i>1</i><em class="">7276万</em></button><button type="button" class="c zt" id="s-002820" data-to="" data-logic="休闲食品+非遗麻花+休闲新品｜首板｜换手板｜开板1次回封" data-name="桂发祥" data-code="002820" data-meta="换手板 · 首板 · 开1 · 10:14→10:15" data-plate="主板" style="--bg:#78909c;--fg:#fff" title=""><b>桂发祥</b><span class="plate plate-main">主板</span><i>1</i><em class="">3078万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">10:20</td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-603138" data-to="600822" data-logic="数据库+智能体应用+定增注册｜4天3板｜换手板" data-name="海量数据" data-code="603138" data-meta="→上海物贸 · 换手板 · 4天3板 · 10:21" data-plate="主板" style="--bg:#eceff1;--fg:#111" title="→ 上海物贸"><b>海量数据</b><span class="plate plate-main">主板</span><i>3板</i><em class="">4965万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">10:25</td><td class="cell"><button type="button" class="c zt" id="s-002696" data-to="001317" data-logic="水产加工+鱼粉鱼油+“羊”字辈｜12天8板｜换手板｜开板1次回封" data-name="百洋股份" data-code="002696" data-meta="→三羊马 · 换手板 · 12天8板 · 开1 · 10:29→10:30" data-plate="主板" style="--bg:#ffd600;--fg:#001" title="→ 三羊马"><b>百洋股份</b><span class="plate plate-main">主板</span><i>8板</i><em class="">5710万</em></button></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-001331" data-to="002931" data-logic="机器人产业链+LNG运贸｜首板｜换手板｜开板2次回封" data-name="胜通能源" data-code="001331" data-meta="→锋龙股份 · 换手板 · 首板 · 开2 · 10:27→10:40" data-plate="主板" style="--bg:#ff5252;--fg:#fff" title="→ 锋龙股份"><b>胜通能源</b><span class="plate plate-main">主板</span><i>1</i><em class="">6422万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-001318" data-to="" data-logic="乳制品+南昌产业链+冷链配送｜首板｜换手板｜开板1次回封" data-name="阳光乳业" data-code="001318" data-meta="换手板 · 首板 · 开1 · 10:27→13:00" data-plate="主板" style="--bg:#78909c;--fg:#fff" title=""><b>阳光乳业</b><span class="plate plate-main">主板</span><i>1</i><em class="">4350万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">10:30</td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt wk" id="s-600822" data-to="002095" data-logic="数据要素+汽车贸易+黑色金属供应链｜首板｜换手板｜开板1次回封" data-name="上海物贸" data-code="600822" data-meta="→生意宝 · 换手板 · 首板 · 开1 · 10:34→10:36" data-plate="主板" style="--bg:#eceff1;--fg:#111" title="→ 生意宝"><b>上海物贸</b><span class="plate plate-main">主板</span><i>1</i><em class="r">1210万 弱</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">11:00</td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-603200" data-to="" data-logic="固态电池+水处理+数据中心液冷｜首板｜换手板｜开板1次回封" data-name="上海洗霸" data-code="603200" data-meta="换手板 · 首板 · 开1 · 11:04→11:19" data-plate="主板" style="--bg:#ff6d00;--fg:#001" title=""><b>上海洗霸</b><span class="plate plate-main">主板</span><i>1</i><em class="">7607万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-603258" data-to="" data-logic="AI游戏+游戏研运+IP衍生｜首板｜换手板" data-name="电魂网络" data-code="603258" data-meta="换手板 · 首板 · 11:03" data-plate="主板" style="--bg:#78909c;--fg:#fff" title=""><b>电魂网络</b><span class="plate plate-main">主板</span><i>1</i><em class="">5978万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">11:05</td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-000635" data-to="" data-logic="控制权变更+氯碱化工+热电协同｜首板｜换手板" data-name="英力特" data-code="000635" data-meta="换手板 · 首板 · 11:06" data-plate="主板" style="--bg:#26c6da;--fg:#001" title=""><b>英力特</b><span class="plate plate-main">主板</span><i>1</i><em class="">6507万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">11:10</td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt wk" id="s-600094" data-to="" data-logic="房地产开发+低空经济+算力运营+6G通信｜2天2板｜换手板｜开板1次回封" data-name="大名城" data-code="600094" data-meta="换手板 · 2天2板 · 开1 · 11:12→14:17" data-plate="主板" style="--bg:#40c4ff;--fg:#001" title=""><b>大名城</b><span class="plate plate-main">主板</span><i>2板</i><em class="r">1990万 弱</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">11:15</td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zb" id="s-001979" data-to="" data-logic="冲板未回封｜房地产开｜炸×5" data-name="招商蛇口" data-code="001979" data-meta="开5 · 11:16" data-plate="主板" style="--bg:#78909c;--fg:#fff" title=""><b>招商蛇口</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button></td></tr><tr><td class="tm">11:20</td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-300976" data-to="" data-logic="回购+折叠屏+光模块散热｜首板｜换手板｜开板1次回封" data-name="达瑞电子" data-code="300976" data-meta="换手板 · 首板 · 开1 · 11:24→11:29" data-plate="创业" style="--bg:#78909c;--fg:#fff" title=""><b>达瑞电子</b><span class="plate plate-cy">创业</span><i>1</i><em class="">1.03亿</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">11:25</td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-002095" data-to="" data-logic="大宗电商+商品数据+AI应用｜首板｜换手板" data-name="生意宝" data-code="002095" data-meta="换手板 · 首板 · 11:27" data-plate="主板" style="--bg:#eceff1;--fg:#111" title=""><b>生意宝</b><span class="plate plate-main">主板</span><i>1</i><em class="">6626万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">13:00</td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-000700" data-to="603683" data-logic="人形机器人+汽车外饰件+毛利率提升｜2天2板｜换手板｜开板1次回封" data-name="模塑科技" data-code="000700" data-meta="→晶华新材 · 换手板 · 2天2板 · 开1 · 13:03→13:05" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title="→ 晶华新材"><b>模塑科技</b><span class="plate plate-main">主板</span><i>2板</i><em class="">7580万</em></button></td><td class="cell"><button type="button" class="c zt" id="s-002931" data-to="605333" data-logic="机器人概念+优必选入主+机电组件+电控产品｜2天2板｜换手板" data-name="锋龙股份" data-code="002931" data-meta="→沪光股份 · 换手板 · 2天2板 · 13:00" data-plate="主板" style="--bg:#ff5252;--fg:#fff" title="→ 沪光股份"><b>锋龙股份</b><span class="plate plate-main">主板</span><i>2板</i><em class="">7314万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">13:05</td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-603683" data-to="603901" data-logic="人形机器人+柔性传感+胶粘材料+股份回购｜首板｜换手板｜开板1次回封" data-name="晶华新材" data-code="603683" data-meta="→永创智能 · 换手板 · 首板 · 开1 · 13:07→13:08" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title="→ 永创智能"><b>晶华新材</b><span class="plate plate-main">主板</span><i>1</i><em class="">4356万</em></button><button type="button" class="c zt" id="s-603901" data-to="688585" data-logic="人形机器人+智能包装+半年报增长｜2天2板｜换手板" data-name="永创智能" data-code="603901" data-meta="→上纬新材 · 换手板 · 2天2板 · 13:09" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title="→ 上纬新材"><b>永创智能</b><span class="plate plate-main">主板</span><i>2板</i><em class="">4251万</em></button></td><td class="cell"><button type="button" class="c zt" id="s-605333" data-to="688386" data-logic="机器人线束+理想汽车+汽车线束｜首板｜换手板｜开板1次回封" data-name="沪光股份" data-code="605333" data-meta="→泛亚微透 · 换手板 · 首板 · 开1 · 13:08→13:09" data-plate="主板" style="--bg:#ff5252;--fg:#fff" title="→ 泛亚微透"><b>沪光股份</b><span class="plate plate-main">主板</span><i>1</i><em class="">3708万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">13:10</td><td class="cell"></td><td class="cell"><button type="button" class="c zb" id="s-002420" data-to="688585" data-logic="冲板未回封｜人形机器人+低空经济｜炸×1" data-name="毅昌科技" data-code="002420" data-meta="→上纬新材 · 开1 · 13:13" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title="→ 上纬新材"><b>毅昌科技</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button></td><td class="cell"></td><td class="cell"><button type="button" class="c zb" id="s-688218" data-to="" data-logic="冲板未回封｜低空经济｜炸×3" data-name="江苏北人" data-code="688218" data-meta="开3 · 13:10" data-plate="科创" style="--bg:#40c4ff;--fg:#001" title=""><b>江苏北人</b><span class="plate plate-kc">科创</span><i>炸</i><em class="r">炸</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-002093" data-to="" data-logic="AI应用+通信服务+养老AI+身联网｜首板｜换手板" data-name="国脉科技" data-code="002093" data-meta="换手板 · 首板 · 13:11" data-plate="主板" style="--bg:#78909c;--fg:#fff" title=""><b>国脉科技</b><span class="plate plate-main">主板</span><i>1</i><em class="">5042万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">13:20</td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-688386" data-to="603955" data-logic="机器人+电子皮肤+微透膜｜首板｜换手板" data-name="泛亚微透" data-code="688386" data-meta="→大千生态 · 换手板 · 首板 · 13:22" data-plate="科创" style="--bg:#ff5252;--fg:#fff" title="→ 大千生态"><b>泛亚微透</b><span class="plate plate-kc">科创</span><i>1</i><em class="">4189万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">13:25</td><td class="cell"></td><td class="cell"><button type="button" class="c zt" id="s-688585" data-to="" data-logic="具身智能+机器人下线+风电树脂｜首板｜换手板｜开板2次回封" data-name="上纬新材" data-code="688585" data-meta="换手板 · 首板 · 开2 · 13:28→13:37" data-plate="科创" style="--bg:#ff1744;--fg:#fff" title=""><b>上纬新材</b><span class="plate plate-kc">科创</span><i>1</i><em class="">6479万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">13:30</td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zb" id="s-301428" data-to="" data-logic="冲板未回封｜数据要素+通信技术+AI智能体｜炸×3" data-name="世纪恒通" data-code="301428" data-meta="开3 · 13:31" data-plate="创业" style="--bg:#eceff1;--fg:#111" title=""><b>世纪恒通</b><span class="plate plate-cy">创业</span><i>炸</i><em class="r">炸</em></button></td><td class="cell"></td><td class="cell"><button type="button" class="c zb" id="s-000829" data-to="" data-logic="冲板未回封｜电商概念｜炸×2" data-name="天音控股" data-code="000829" data-meta="开2 · 13:34" data-plate="主板" style="--bg:#ff9100;--fg:#001" title=""><b>天音控股</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">13:50</td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt wk" id="s-603955" data-to="002869" data-logic="羽毛球机器人+宠物服务｜首板｜换手板" data-name="大千生态" data-code="603955" data-meta="→金溢科技 · 换手板 · 首板 · 13:53" data-plate="主板" style="--bg:#ff5252;--fg:#fff" title="→ 金溢科技"><b>大千生态</b><span class="plate plate-main">主板</span><i>1</i><em class="r">969万 弱</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">13:55</td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt wk" id="s-002869" data-to="" data-logic="车路协同+智慧交通+机器人应用｜首板｜换手板｜开板1次回封" data-name="金溢科技" data-code="002869" data-meta="换手板 · 首板 · 开1 · 13:57→15:00" data-plate="主板" style="--bg:#ff5252;--fg:#fff" title=""><b>金溢科技</b><span class="plate plate-main">主板</span><i>1</i><em class="r">151万 弱</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">14:00</td><td class="cell"></td><td class="cell"><button type="button" class="c zb" id="s-001400" data-to="" data-logic="冲板未回封｜减速器+商业航天｜炸×1" data-name="江顺科技" data-code="001400" data-meta="开1 · 14:01" data-plate="主板" style="--bg:#ff1744;--fg:#fff" title=""><b>江顺科技</b><span class="plate plate-main">主板</span><i>炸</i><em class="r">炸</em></button></td><td class="cell"></td><td class="cell"><button type="button" class="c zb" id="s-300552" data-to="" data-logic="冲板未回封｜低空经济+数据要素｜炸×1" data-name="万集科技" data-code="300552" data-meta="开1 · 14:00" data-plate="创业" style="--bg:#40c4ff;--fg:#001" title=""><b>万集科技</b><span class="plate plate-cy">创业</span><i>炸</i><em class="r">炸</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">14:30</td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"><button type="button" class="c zt wk" id="s-300949" data-to="" data-logic="奥创引擎+IP+综合文旅+景观设计｜首板｜换手板" data-name="奥雅股份" data-code="300949" data-meta="换手板 · 首板 · 14:33" data-plate="创业" style="--bg:#78909c;--fg:#fff" title=""><b>奥雅股份</b><span class="plate plate-cy">创业</span><i>1</i><em class="r">1220万 弱</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr><tr><td class="tm">14:50</td><td class="cell"><button type="button" class="c zt" id="s-001317" data-to="" data-logic="“羊”字辈+汽车物流+多式联运｜首板｜换手板" data-name="三羊马" data-code="001317" data-meta="换手板 · 首板 · 14:52" data-plate="主板" style="--bg:#ffd600;--fg:#001" title=""><b>三羊马</b><span class="plate plate-main">主板</span><i>1</i><em class="">6826万</em></button></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+</tbody></table>
+</div>
+</div>
+</div>
+<div class="mask" id="mask"><div class="dlg">
+<h2 id="p-name"></h2><div class="meta" id="p-meta"></div><div class="logic" id="p-logic"></div>
+<button type="button" id="p-close">关闭</button>
+</div></div>
+<script>
+const EDGES = [["600822", "002095", "数据要素接力", "zt"], ["002178", "603138", "数据要素接力", "zt"], ["603337", "605488", "人形机器人接力", "zt"], ["603528", "603337", "人形机器人接力", "zt"], ["603138", "600822", "数据要素接力", "zt"], ["605488", "002708", "人形机器人接力", "zt"], ["301502", "603028", "工业机器人接力", "zt"], ["605333", "688386", "工业机器人接力", "zt"], ["603901", "688585", "人形机器人接力", "zt"], ["688648", "001331", "工业机器人接力", "zt"], ["002931", "605333", "工业机器人接力", "zt"], ["600826", "000678", "工业机器人接力", "zt"], ["603089", "600826", "工业机器人接力", "zt"], ["603719", "002820", "休闲食品接力", "zt"], ["688386", "603955", "工业机器人接力", "zt"], ["002086", "002696", "羊字辈接力", "zt"], ["603657", "688648", "工业机器人接力", "zt"], ["002578", "300916", "工业机器人接力", "zt"], ["603028", "603089", "工业机器人接力", "zt"], ["001331", "002931", "工业机器人接力", "zt"], ["002696", "001317", "羊字辈接力", "zt"], ["002708", "000559", "人形机器人接力", "zt"], ["603955", "002869", "工业机器人接力", "zt"], ["300916", "600980", "工业机器人接力", "zt"], ["600558", "002086", "羊字辈接力", "zt"], ["000559", "603331", "人形机器人接力", "zt"], ["600980", "603657", "工业机器人接力", "zt"], ["603683", "603901", "人形机器人接力", "zt"], ["603331", "000810", "人形机器人接力", "zt"], ["000700", "603683", "人形机器人接力", "zt"], ["000810", "000700", "人形机器人接力", "zt"], ["000678", "002578", "工业机器人接力", "zt"], ["603007", "600094", "炸板→低空经济", "zb"], ["003009", "600094", "炸板→低空经济", "zb"], ["603278", "000559", "炸板→人形机器人", "zb"], ["002009", "603528", "炸板→人形机器人", "zb"], ["603081", "603528", "炸板→人形机器人", "zb"], ["603677", "002931", "炸板→机器人概念", "zb"], ["603933", "603528", "炸板→人形机器人", "zb"], ["002354", "603528", "炸板→人形机器人", "zb"], ["688228", "600822", "炸板→数据要素", "zb"], ["002474", "002178", "炸板→数据要素", "zb"], ["002420", "688585", "炸板→人形机器人", "zb"], ["301015", "002931", "炸板→机器人概念", "zb"]];
+const svg = document.getElementById('arrows');
+const stage = document.getElementById('stage');
+const wrap = document.getElementById('wrap');
+
+function offsetIn(el, root){
+  let x=0, y=0, n=el;
+  while(n && n!==root){
+    x += n.offsetLeft;
+    y += n.offsetTop;
+    n = n.offsetParent;
+  }
+  if(n!==root){
+    const sr=root.getBoundingClientRect(), r=el.getBoundingClientRect();
+    return {x:r.left-sr.left, y:r.top-sr.top};
+  }
+  return {x,y};
+}
+function center(el){
+  if(!el) return null;
+  const o = offsetIn(el, stage);
+  return { x: o.x + el.offsetWidth/2, y1: o.y + 3, y2: o.y + el.offsetHeight - 3 };
+}
+function draw(highlight){
+  [...svg.querySelectorAll('.edge,.edge-lab')].forEach(p=>p.remove());
+  const table = document.getElementById('grid');
+  const W = table.offsetWidth;
+  const H = table.offsetHeight;
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+  svg.style.width = W + 'px';
+  svg.style.height = H + 'px';
+  EDGES.forEach(([a,b,reason,st], idx)=>{
+    const ea=document.getElementById('s-'+a);
+    const eb=document.getElementById('s-'+b);
+    if(!ea||!eb) return;
+    const A=center(ea), B=center(eb);
+    if(!A||!B) return;
+    const x1=A.x, y1=A.y2, x2=B.x, y2=B.y1;
+    const midY = (y1+y2)/2;
+    const bend = ((idx % 5) - 2) * 10;
+    const mx = (x1+x2)/2 + bend;
+    const my = midY + bend * 0.4;
+    const d = 'M'+x1+','+y1+' C'+x1+','+my+' '+x2+','+my+' '+x2+','+y2;
+    const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d', d);
+    p.setAttribute('class','edge');
+    p.setAttribute('data-a', a);
+    p.setAttribute('data-b', b);
+    const hi = !highlight || highlight===a || highlight===b;
+    const zb = st==='zb';
+    const xx = st==='x';
+    const stroke = zb ? '#ff9100' : (xx ? '#00e5ff' : '#ffea00');
+    p.setAttribute('stroke', stroke);
+    p.setAttribute('stroke-width', hi ? 2.6 : 1.1);
+    p.setAttribute('fill','none');
+    p.setAttribute('opacity', hi ? 0.95 : 0.18);
+    p.setAttribute('marker-end', zb ? 'url(#ahz)' : (xx ? 'url(#ahx)' : 'url(#ah)'));
+    if(zb) p.setAttribute('stroke-dasharray','6 4');
+    svg.appendChild(p);
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('class','edge-lab');
+    t.setAttribute('x', mx);
+    t.setAttribute('y', my - 4);
+    t.setAttribute('text-anchor','middle');
+    t.setAttribute('opacity', hi ? 1 : 0.25);
+    t.textContent = reason;
+    svg.appendChild(t);
+  });
+}
+let hi=null;
+document.querySelectorAll('.c').forEach(el=>{
+  el.addEventListener('mouseenter',()=>{ hi=el.dataset.code; draw(hi); });
+  el.addEventListener('mouseleave',()=>{ hi=null; draw(null); });
+  el.addEventListener('click',()=>{
+    document.getElementById('p-name').textContent=el.dataset.name+'（'+el.dataset.code+'）';
+    const plateTxt = el.dataset.plate ? ('板别：'+el.dataset.plate+' · ') : '';
+    document.getElementById('p-meta').textContent=plateTxt+el.dataset.meta;
+    const rel = EDGES.filter(e=>e[0]===el.dataset.code || e[1]===el.dataset.code)
+      .map(e=>{
+        const other = e[0]===el.dataset.code ? e[1] : e[0];
+        const o = document.getElementById('s-'+other);
+        const on = o ? o.dataset.name : other;
+        const dir = e[0]===el.dataset.code ? '→' : '←';
+        return dir+' '+on+'｜'+e[2];
+      });
+    const base = el.dataset.logic;
+    const sep = String.fromCharCode(10);
+    document.getElementById('p-logic').textContent = rel.length
+      ? (base + sep + sep + '盘口关系：' + sep + rel.join(sep))
+      : base;
+    document.getElementById('mask').classList.add('on');
+  });
+});
+document.getElementById('p-close').onclick=()=>document.getElementById('mask').classList.remove('on');
+document.getElementById('mask').onclick=e=>{if(e.target.id==='mask') e.currentTarget.classList.remove('on');};
+window.addEventListener('resize',()=>draw(hi));
+requestAnimationFrame(()=>draw(null));
+setTimeout(()=>draw(null), 100);
+/* PAN: left/middle mouse drag pans #wrap scroll; threshold keeps card clicks */
+(function(){
+  const THRESH = 5;
+  let active = false;
+  let panned = false;
+  let sx = 0, sy = 0, sl = 0, st = 0;
+  function onMove(e){
+    if(!active) return;
+    const dx = e.clientX - sx;
+    const dy = e.clientY - sy;
+    if(!panned && (Math.abs(dx) > THRESH || Math.abs(dy) > THRESH)){
+      panned = true;
+      wrap.classList.add('is-panning');
+    }
+    if(panned){
+      wrap.scrollLeft = sl - dx;
+      wrap.scrollTop = st - dy;
+      e.preventDefault();
+    }
+  }
+  function onUp(){
+    if(!active) return;
+    active = false;
+    wrap.classList.remove('is-panning');
+    window.removeEventListener('mousemove', onMove, true);
+    window.removeEventListener('mouseup', onUp, true);
+    if(panned){
+      const block = (ev)=>{
+        ev.preventDefault();
+        ev.stopPropagation();
+        wrap.removeEventListener('click', block, true);
+      };
+      wrap.addEventListener('click', block, true);
+      setTimeout(()=>wrap.removeEventListener('click', block, true), 0);
+    }
+  }
+  wrap.addEventListener('mousedown', (e)=>{
+    if(e.button !== 0 && e.button !== 1) return;
+    if(e.target.closest && e.target.closest('a,input,textarea,select,option,.zoombar,.dlg')) return;
+    active = true;
+    panned = false;
+    sx = e.clientX; sy = e.clientY;
+    sl = wrap.scrollLeft; st = wrap.scrollTop;
+    if(e.button === 1) e.preventDefault();
+    window.addEventListener('mousemove', onMove, true);
+    window.addEventListener('mouseup', onUp, true);
+  });
+  wrap.addEventListener('dragstart', (e)=>{ if(panned || active) e.preventDefault(); });
+})();
+
+/* ZOOM_JS_START */
+/* 默认比例：把矩阵自然宽度缩进视口（不超过 100%，不低于 20%）。
+   竖向放不下时预留滚动条宽度，避免重置后比例跳动；若仍溢出则再减 1%。
+   重置回到该比例。放大/缩小对齐到 10% 刻度。Ctrl/⌘+滚轮以光标为中心缩放。范围 20%–200%。
+   缩放用 CSS zoom 作用在 #stage 上，表格与 SVG 箭头同一层一起变，吸顶表头仍相对滚动区固定。 */
+(function(){
+  const MIN_Z = 0.2, MAX_Z = 2;
+  const table = document.getElementById('grid');
+  const pctEl = document.getElementById('zoom-pct');
+  const btnIn = document.getElementById('zoom-in');
+  const btnOut = document.getElementById('zoom-out');
+  const btnReset = document.getElementById('zoom-reset');
+  let zoom = 1;
+  let userZoomed = false;
+  let fitting = false;
+
+  function roundZ(z){
+    return Math.min(MAX_Z, Math.max(MIN_Z, Math.round(z * 100) / 100));
+  }
+  function padBox(){
+    const cs = getComputedStyle(wrap);
+    return {
+      l: parseFloat(cs.paddingLeft) || 0,
+      t: parseFloat(cs.paddingTop) || 0,
+      x: (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0)
+    };
+  }
+  function applyScaleClass(){
+    stage.classList.toggle('is-scaled', Math.abs(zoom - 1) > 0.001);
+  }
+  function naturalSize(){
+    const prevZoom = stage.style.zoom;
+    const scaled = stage.classList.contains('is-scaled');
+    stage.style.zoom = '1';
+    stage.classList.add('is-scaled');
+    const size = {w: table.offsetWidth, h: table.offsetHeight};
+    stage.style.zoom = prevZoom;
+    stage.classList.toggle('is-scaled', scaled);
+    return size;
+  }
+  function defaultZoom(){
+    const size = naturalSize();
+    if (!size.w) return 1;
+    const cs = getComputedStyle(wrap);
+    const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    const gutter = Math.max(0, wrap.offsetWidth - wrap.clientWidth);
+    const base = wrap.clientWidth + gutter;
+    let avail = Math.max(1, base - padX - 2);
+    let fit = Math.min(1, avail / size.w);
+    if (size.h * fit + padY > wrap.clientHeight + 1) {
+      avail = Math.max(1, avail - (gutter > 2 ? gutter : 16));
+      fit = Math.min(1, avail / size.w);
+    }
+    const z = Math.floor(fit * 100 + 1e-6) / 100;
+    return Math.min(MAX_Z, Math.max(MIN_Z, z));
+  }
+  function applyDefault(resetScroll){
+    if (fitting) return;
+    fitting = true;
+    userZoomed = false;
+    setZoom(defaultZoom(), null, false);
+    let guard = 0;
+    while (wrap.scrollWidth > wrap.clientWidth + 1 && zoom > MIN_Z + 0.001 && guard < 8) {
+      setZoom((Math.round(zoom * 100) - 1) / 100, null, false);
+      guard++;
+    }
+    if (resetScroll) {
+      wrap.scrollLeft = 0;
+      wrap.scrollTop = 0;
+    }
+    userZoomed = false;
+    fitting = false;
+  }
+  function updateUi(){
+    pctEl.textContent = Math.round(zoom * 100) + '%';
+    btnOut.disabled = zoom <= MIN_Z + 0.001;
+    btnIn.disabled = zoom >= MAX_Z - 0.001;
+  }
+  function setZoom(next, anchor, fromUser){
+    const prev = zoom || 1;
+    next = roundZ(next);
+    const rect = wrap.getBoundingClientRect();
+    const vx = anchor ? (anchor.clientX - rect.left) : (wrap.clientWidth / 2);
+    const vy = anchor ? (anchor.clientY - rect.top) : (wrap.clientHeight / 2);
+    const pad = padBox();
+    const localX = (wrap.scrollLeft + vx - pad.l) / prev;
+    const localY = (wrap.scrollTop + vy - pad.t) / prev;
+    zoom = next;
+    if (fromUser) userZoomed = true;
+    stage.style.zoom = String(zoom);
+    applyScaleClass();
+    draw(typeof hi === 'undefined' ? null : hi);
+    const maxL = Math.max(0, wrap.scrollWidth - wrap.clientWidth);
+    const maxT = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
+    wrap.scrollLeft = Math.min(maxL, Math.max(0, localX * zoom + pad.l - vx));
+    wrap.scrollTop = Math.min(maxT, Math.max(0, localY * zoom + pad.t - vy));
+    updateUi();
+  }
+
+  function stepZoom(dir){
+    const pct = Math.round(zoom * 100);
+    const nextPct = dir > 0
+      ? Math.min(MAX_Z * 100, Math.ceil((pct + 1) / 10) * 10)
+      : Math.max(MIN_Z * 100, Math.floor((pct - 1) / 10) * 10);
+    setZoom(nextPct / 100, null, true);
+  }
+  btnOut.addEventListener('click', function(){ stepZoom(-1); });
+  btnIn.addEventListener('click', function(){ stepZoom(1); });
+  btnReset.addEventListener('click', function(){ applyDefault(true); });
+
+  document.addEventListener('wheel', function(e){
+    if (!e.ctrlKey && !e.metaKey) return;
+    const mask = document.getElementById('mask');
+    if (mask && mask.classList.contains('on')) return;
+    e.preventDefault();
+    let dy = e.deltaY;
+    if (e.deltaMode === 1) dy *= 16;
+    else if (e.deltaMode === 2) dy *= wrap.clientHeight || 800;
+    const factor = Math.exp(-dy * 0.0015);
+    setZoom(zoom * factor, {clientX: e.clientX, clientY: e.clientY}, true);
+  }, {passive: false, capture: true});
+
+  let pinch = null;
+  function pinchDist(touches){
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy) || 1;
+  }
+  wrap.addEventListener('touchstart', function(e){
+    if (e.touches.length === 2) pinch = {d: pinchDist(e.touches), z: zoom};
+  }, {passive: true});
+  wrap.addEventListener('touchmove', function(e){
+    if (!(e.touches.length === 2 && pinch)) return;
+    e.preventDefault();
+    const d = pinchDist(e.touches);
+    setZoom(pinch.z * (d / pinch.d), {
+      clientX: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+      clientY: (e.touches[0].clientY + e.touches[1].clientY) / 2
+    }, true);
+  }, {passive: false});
+  wrap.addEventListener('touchend', function(){ pinch = null; }, {passive: true});
+  wrap.addEventListener('touchcancel', function(){ pinch = null; }, {passive: true});
+
+  window.addEventListener('resize', function(){
+    if (!userZoomed) applyDefault(false);
+  });
+
+  applyDefault(false);
+})();
+/* ZOOM_JS_END */
+</script>
+</body></html>
