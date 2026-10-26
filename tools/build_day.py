@@ -29,6 +29,11 @@ import json
 import re
 import sys
 from collections import Counter, defaultdict
+
+try:
+    from zoom_inject import ensure_zoom
+except ImportError:  # pragma: no cover
+    ensure_zoom = None
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -1209,7 +1214,7 @@ th,td{{border:1px solid #444;padding:4px;vertical-align:top}}
 th{{background:#1a1a1a;color:#fff;position:sticky;top:0;z-index:3;font-size:11px;min-width:120px;max-width:160px;border-bottom:2px solid #fff}}
 th .arr{{display:block;font-weight:500;color:#ff0;font-size:10px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
 td.tm{{position:sticky;left:0;background:#222;color:#0f0;font-weight:800;z-index:2;white-space:nowrap;min-width:48px;border-right:2px solid #0f0}}
-.c{{display:flex;align-items:center;gap:4px;width:100%;margin:0 0 4px;padding:5px 6px;border-radius:4px;border:2px solid #000;background:var(--bg);color:var(--fg);cursor:pointer;font:inherit;font-weight:700;box-shadow:0 0 0 1px rgba(255,255,255,.35)}}
+.c{{display:flex;align-items:center;gap:4px;width:100%;margin:0 0 4px;padding:5px 6px;border-radius:4px;border:2px solid #000;background:var(--bg);color:var(--fg);cursor:pointer;font:inherit;font-weight:700}}
 .c b{{flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:inherit}}
 .c i{{font-style:normal;font-size:10px;background:#000;color:#ff0;padding:0 3px;border-radius:2px}}
 .c .plate{{font-style:normal;font-size:10px;font-weight:900;padding:1px 4px;border-radius:3px;border:1px solid #fff;letter-spacing:.02em;flex-shrink:0}}
@@ -1224,7 +1229,8 @@ td.tm{{position:sticky;left:0;background:#222;color:#0f0;font-weight:800;z-index
 .plate-leg .pl .plate-cy{{background:#ff6d00;color:#000}}
 .plate-leg .pl .plate-kc{{background:#aa00ff;color:#fff}}
 .plate-leg .pl .plate-bj{{background:#546e7a;color:#fff}}
-.c.zb{{border-style:dashed;border-width:2px;border-color:#000;filter:saturate(.85);opacity:.95}}
+.c.zt{{border-style:solid;border-width:2px;border-color:#000;box-shadow:0 0 0 1px rgba(255,255,255,.35)}}
+.c.zb{{border-style:dashed;border-width:3px;border-color:#ff9100;box-shadow:0 0 0 1px #ffea00,inset 0 0 0 1px rgba(255,145,0,.35);filter:saturate(.9);opacity:1;background-image:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,145,0,.06) 2px,rgba(255,145,0,.06) 4px)}}
 .c.wk{{outline:3px solid #ff0;outline-offset:1px}}
 .c em{{font-style:normal;font-size:10px;background:#000;color:#fff;padding:0 3px;border-radius:2px}}
 .c em.r{{background:#ff0;color:#000;font-weight:900}}
@@ -1243,9 +1249,9 @@ td.tm{{position:sticky;left:0;background:#222;color:#0f0;font-weight:800;z-index
 <div class="page">
 <div class="head">
 <h1>{date} 涨停时间轴 · 按涨停逻辑分列</h1>
-<div class="sub">封板{zt_n} · 炸板{zb_n} · 弱封单{wk_n} · 同列逻辑接力（黄实线）· 炸板关联（橙虚线）· 跨列共享逻辑（青实线）· 线上标注原因 · 数据：同花顺封板池 reason_type + 东财封单/时间</div>
+<div class="sub">封板{zt_n} · 炸板{zb_n} · 弱封单{wk_n} · 涨停实心边框 · 炸板橙黄虚线框 · 同列逻辑接力（黄实线）· 炸板关联（橙虚线）· 跨列共享逻辑（青实线）· 线上标注原因 · 数据：同花顺封板池 reason_type + 东财封单/时间</div>
 <div class="leg">{leg} · 板别 {plate_leg}</div>
-<div class="key">高对比色块 · 黄框=弱封单(&lt;3000万) · 悬停高亮相关线 · 点击看 reason_type｜高位｜板型｜板别 · 每条线中段有原因标签 · 蓝徽=主板 · 橙徽=创业 · 紫徽=科创 · <b>按住拖动平移</b></div>
+<div class="key">卡片边框：<b style="color:#fff">涨停实心</b> · <b style="color:#ff9100">炸板虚线</b>（橙黄虚线框）· 黄框=弱封单(&lt;3000万) · 悬停高亮相关线 · 点击看 reason_type｜高位｜板型｜板别 · 每条线中段有原因标签 · 蓝徽=主板 · 橙徽=创业 · 紫徽=科创 · <b>按住拖动平移</b></div>
 </div>
 <div class="wrap" id="wrap">
 <div id="stage">
@@ -1450,6 +1456,8 @@ def main():
 
     out = OUT_DIR / f"{date}-涨停时间轴复盘.html"
     audit_out = OUT_DIR / f"{date}-zt-audit.json"
+    if ensure_zoom is not None:
+        html = ensure_zoom(html)
     out.write_text(html, encoding="utf-8")
 
     audit_list = []

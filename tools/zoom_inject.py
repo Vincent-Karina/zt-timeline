@@ -30,7 +30,7 @@ ZOOM_BAR = """<!-- ZOOM_BAR_START -->
   <span id="zoom-pct" aria-live="polite" title="当前缩放比例">100%</span>
   <button type="button" id="zoom-in" title="放大">＋ 放大</button>
   <button type="button" id="zoom-reset" title="回到默认比例">重置</button>
-  <span class="zoom-hint">默认按视口宽度适配 · Ctrl/⌘+滚轮缩放 · 滚动平移</span>
+  <span class="zoom-hint">默认按视口宽度适配 · Ctrl/⌘+滚轮缩放 · 按住拖动平移</span>
 </div>
 <!-- ZOOM_BAR_END -->"""
 
