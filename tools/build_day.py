@@ -21,6 +21,7 @@ Reads:
 Writes:
   /workspace/{date}-涨停时间轴复盘.html
   /workspace/{date}-zt-audit.json
+  /workspace/zt-raw/trends/{date}/{code}.json  (东财分时缓存，开板票)
 """
 from __future__ import annotations
 
@@ -28,7 +29,11 @@ import argparse
 import json
 import re
 import sys
+import time
+import urllib.error
+import urllib.request
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     from zoom_inject import ensure_zoom
@@ -42,6 +47,15 @@ TZ = ZoneInfo("Asia/Shanghai")
 WEAK_SEAL = 30_000_000
 RAW = Path("/workspace/zt-raw")
 OUT_DIR = Path("/workspace")
+TRENDS_DIR = RAW / "trends"
+TRENDS_HOSTS = [
+    "53.push2his.eastmoney.com",
+    "push2his.eastmoney.com",
+    "push2delay.eastmoney.com",
+    "82.push2his.eastmoney.com",
+]
+LIMIT_TOL = 0.01
+TRENDS_WORKERS = 6
 
 # (logic_name, bg, fg) — order = 列序
 # 大列=视觉归并（消费/医药/基建）；细逻辑经 SUB_TO_BUCKET 映射进大列。
@@ -372,6 +386,277 @@ def plate_of(code: str) -> str:
     return "主板"
 
 
+def secid_of(code: str) -> str:
+    """Eastmoney secid: 沪市 1.xxxxxx，深市/北证 0.xxxxxx."""
+    c = str(code or "").strip()
+    if c.startswith(("5", "6", "9")) or c.startswith("688"):
+        return f"1.{c}"
+    return f"0.{c}"
+
+
+def limit_up_pct(code: str) -> float:
+    plate = plate_of(code)
+    if plate in ("创业", "科创"):
+        return 0.20
+    if plate == "北证":
+        return 0.30
+    return 0.10
+
+
+def limit_up_price(pre_price: float, code: str) -> float:
+    return round(float(pre_price) * (1.0 + limit_up_pct(code)) + 1e-8, 2)
+
+
+def _hhmm_to_hms(hhmm: str) -> str:
+    hhmm = (hhmm or "").strip()
+    if len(hhmm) == 5 and hhmm[2] == ":":
+        return hhmm + ":00"
+    if len(hhmm) >= 8 and hhmm[2] == ":":
+        return hhmm[:8]
+    return hhmm
+
+
+def fetch_trends2(code: str, date: str, use_cache: bool = True) -> dict | None:
+    """Fetch/cached Eastmoney trends2 for one code; filter bars to ``date``."""
+    day_dir = TRENDS_DIR / date
+    day_dir.mkdir(parents=True, exist_ok=True)
+    cache = day_dir / f"{code}.json"
+    if use_cache and cache.exists():
+        try:
+            data = json.loads(cache.read_text(encoding="utf-8"))
+            trends = data.get("trends") or []
+            if trends and any(date in (t.split(",")[0] if isinstance(t, str) else "") for t in trends[:3] + trends[-3:]):
+                return data
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    secid = secid_of(code)
+    fields = (
+        "fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13"
+        "&fields2=f51,f52,f53,f54,f55,f56,f57,f58"
+    )
+    last_err: Exception | None = None
+    for ndays in (1, 5):
+        for host in TRENDS_HOSTS:
+            url = (
+                f"https://{host}/api/qt/stock/trends2/get?{fields}"
+                f"&secid={secid}&ndays={ndays}&iscr=0"
+            )
+            for attempt in range(3):
+                try:
+                    req = urllib.request.Request(
+                        url,
+                        headers={
+                            "User-Agent": "Mozilla/5.0 (compatible; zt-timeline/1.0)",
+                            "Referer": "https://quote.eastmoney.com/",
+                            "Accept": "application/json,*/*",
+                        },
+                    )
+                    with urllib.request.urlopen(req, timeout=25) as resp:
+                        payload = json.loads(resp.read().decode("utf-8", errors="replace"))
+                    data = payload.get("data") or {}
+                    trends = data.get("trends") or []
+                    if not trends:
+                        last_err = RuntimeError(f"empty trends {code}@{host}")
+                        break
+                    day_bars = [t for t in trends if isinstance(t, str) and t.startswith(date)]
+                    if not day_bars and ndays == 1:
+                        # likely wrong day; try more ndays
+                        last_err = RuntimeError(f"no bars for {date}")
+                        break
+                    if not day_bars:
+                        continue
+                    out = dict(data)
+                    out["trends"] = day_bars
+                    out["_fetched_host"] = host
+                    out["_target_date"] = date
+                    cache.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+                    return out
+                except Exception as e:  # noqa: BLE001 — network soft-fail
+                    last_err = e
+                    time.sleep(0.35 * (attempt + 1))
+            time.sleep(0.15)
+    if last_err:
+        print(f"trends fail {code}: {last_err}", file=sys.stderr)
+    return None
+
+
+def infer_blast_reseal(
+    trends_data: dict,
+    code: str,
+    first: str,
+) -> tuple[list[str], list[str]]:
+    """Minute close state machine: 封=进入涨停，炸=离开涨停.
+
+    09:25/≤09:30 首封：分时从 09:30 起视为已封（池子 first 为准）。
+    若 close 推演炸板为空但分时曾探低，再用 low 补一次（仍不强造）。
+    """
+    pre = float(trends_data.get("prePrice") or trends_data.get("preClose") or 0)
+    if pre <= 0:
+        return [], []
+    lim = limit_up_price(pre, code)
+    trends = trends_data.get("trends") or []
+
+    def run(use_low: bool) -> tuple[list[str], list[str]]:
+        try:
+            fh, fm, _ = map(int, first.split(":"))
+        except Exception:
+            fh, fm = 9, 30
+        sealed = (fh * 60 + fm) <= (9 * 60 + 30)
+        blasts: list[str] = []
+        reseals: list[str] = []
+        for line in trends:
+            if not isinstance(line, str):
+                continue
+            parts = line.split(",")
+            if len(parts) < 5:
+                continue
+            try:
+                hhmm = parts[0].split(" ")[1]
+                close = float(parts[2])
+                low = float(parts[4])
+            except (IndexError, ValueError):
+                continue
+            end_at = close >= lim - LIMIT_TOL
+            ts = _hhmm_to_hms(hhmm)
+            if use_low:
+                if sealed:
+                    if low < lim - LIMIT_TOL:
+                        blasts.append(ts)
+                        if end_at:
+                            if blasts:
+                                reseals.append(ts)
+                            sealed = True
+                        else:
+                            sealed = False
+                elif end_at:
+                    if blasts:
+                        reseals.append(ts)
+                    sealed = True
+            else:
+                if sealed and not end_at:
+                    blasts.append(ts)
+                    sealed = False
+                elif (not sealed) and end_at:
+                    # 首封不记入回封；仅炸板之后的再次封板记 reseal
+                    if blasts:
+                        reseals.append(ts)
+                    sealed = True
+        return blasts, reseals
+
+    blasts, reseals = run(False)
+    if not blasts:
+        b2, r2 = run(True)
+        if b2:
+            return b2, r2
+    return blasts, reseals
+
+
+def apply_open_board_fallback(rec: dict) -> None:
+    """Degrade when trends missing: last→回封；炸板不强造."""
+    rec.setdefault("blast_times", [])
+    rec.setdefault("reseal_times", [])
+    rec.setdefault("last_blast", "")
+    rec.setdefault("last_reseal", "")
+    if int(rec.get("open_num") or 0) <= 0:
+        return
+    if rec["status"] == "zt" and rec.get("first") != rec.get("last"):
+        if not rec["last_reseal"]:
+            rec["last_reseal"] = rec["last"]
+        if not rec["reseal_times"]:
+            rec["reseal_times"] = [rec["last"]]
+
+
+def enrich_records_blast_reseal(recs: list[dict], date: str) -> None:
+    """Pull trends2 for open_num>0 names; fill blast/reseal fields."""
+    targets = [r for r in recs if int(r.get("open_num") or 0) > 0]
+    if not targets:
+        for r in recs:
+            r.setdefault("blast_times", [])
+            r.setdefault("reseal_times", [])
+            r.setdefault("last_blast", "")
+            r.setdefault("last_reseal", "")
+        return
+
+    def work(rec: dict) -> tuple[str, list[str], list[str], bool]:
+        data = fetch_trends2(rec["code"], date, use_cache=True)
+        if not data:
+            return rec["code"], [], [], False
+        blasts, reseals = infer_blast_reseal(data, rec["code"], rec.get("first") or "09:30:00")
+        return rec["code"], blasts, reseals, True
+
+    results: dict[str, tuple[list[str], list[str], bool]] = {}
+    with ThreadPoolExecutor(max_workers=TRENDS_WORKERS) as pool:
+        futs = {pool.submit(work, r): r["code"] for r in targets}
+        for fut in as_completed(futs):
+            code, blasts, reseals, ok = fut.result()
+            results[code] = (blasts, reseals, ok)
+
+    for r in recs:
+        r.setdefault("blast_times", [])
+        r.setdefault("reseal_times", [])
+        r.setdefault("last_blast", "")
+        r.setdefault("last_reseal", "")
+        if int(r.get("open_num") or 0) <= 0:
+            continue
+        blasts, reseals, ok = results.get(r["code"], ([], [], False))
+        if ok:
+            r["blast_times"] = blasts
+            r["reseal_times"] = reseals
+            r["last_blast"] = blasts[-1] if blasts else ""
+            r["last_reseal"] = reseals[-1] if reseals else ""
+            # zt 最终回封：分时未抓到时用池子 last
+            if r["status"] == "zt" and not r["last_reseal"] and r.get("first") != r.get("last"):
+                r["last_reseal"] = r["last"]
+                r["reseal_times"] = list(reseals) + [r["last"]]
+        apply_open_board_fallback(r)
+
+
+def logic_with_times(r: dict) -> str:
+    base = r.get("reason") or ""
+    extras = []
+    if r.get("blast_times"):
+        extras.append("炸板:" + ",".join(t[:5] for t in r["blast_times"]))
+    elif r.get("last_blast"):
+        extras.append("炸板:" + r["last_blast"][:5])
+    if r.get("reseal_times"):
+        extras.append("回封:" + ",".join(t[:5] for t in r["reseal_times"]))
+    elif r.get("last_reseal"):
+        extras.append("回封:" + r["last_reseal"][:5])
+    if extras:
+        return base + "｜" + "｜".join(extras)
+    return base
+
+
+def card_em_html(r: dict) -> str:
+    """Right-side pill on main card: seal / 炸HH:MM / 回HH:MM."""
+    if r["status"] == "zb":
+        lb = r.get("last_blast") or ""
+        on = int(r.get("open_num") or 1)
+        if lb:
+            label = f"炸{lb[:5]}" + (f"×{on}" if on > 1 else "")
+        else:
+            label = f"炸×{on}"
+        return f'<em class="r">{html_esc(label)}</em>'
+    on = int(r.get("open_num") or 0)
+    if on > 0:
+        parts = []
+        lb = r.get("last_blast") or ""
+        if lb:
+            parts.append(f"炸{lb[:5]}" + (f"×{on}" if on > 1 else ""))
+        else:
+            parts.append(f"炸×{on}")
+        lr = r.get("last_reseal") or ""
+        if not lr and r.get("first") != r.get("last"):
+            lr = r.get("last") or ""
+        if lr:
+            parts.append(f"回{lr[:5]}")
+        return f'<em class="r">{html_esc(" ".join(parts))}</em>'
+    wk = r["seal"] < WEAK_SEAL
+    if wk:
+        return f'<em class="r">{fmt_seal2(r["seal"])} 弱</em>'
+    return f'<em class="">{fmt_seal2(r["seal"])}</em>'
+
 
 def split_tags(reason_type: str | None) -> list[str]:
     if not reason_type:
@@ -662,6 +947,11 @@ def meta_for(r, name_of):
     if r["status"] == "zb":
         parts.append(f"开{r['open_num']}")
         parts.append(r["first"][:5] if len(r["first"]) >= 5 else r["first"])
+        lb = r.get("last_blast") or ""
+        if lb:
+            parts.append(f"炸{lb[:5]}")
+        elif r.get("blast_times"):
+            parts.append(f"炸{r['blast_times'][-1][:5]}")
     else:
         parts.append(r["limit_type"])
         parts.append(r["high_days"])
@@ -671,6 +961,12 @@ def meta_for(r, name_of):
             parts.append(f"{r['first'][:5]}→{r['last'][:5]}")
         else:
             parts.append(r["first"][:5])
+        lb = r.get("last_blast") or ""
+        lr = r.get("last_reseal") or ""
+        if lb:
+            parts.append(f"炸{lb[:5]}")
+        if lr and lr != r.get("first"):
+            parts.append(f"回{lr[:5]}")
     return " · ".join(parts)
 
 
@@ -1125,11 +1421,26 @@ def render_html(date: str, recs: list[dict], edges: list[list]) -> tuple[str, in
             names.append("—")
         header_arr[th] = " → ".join(names[:3])
 
-    buckets = sorted({bucket_time(r["first"]) for r in recs})
     grid = defaultdict(lambda: defaultdict(list))
+    marks = defaultdict(lambda: defaultdict(list))  # bucket -> theme -> [(kind, rec)]
+    bucket_set = set()
     for r in recs:
-        b = bucket_time(r["first"])
-        grid[b][r["theme"]].append(r)
+        fb = bucket_time(r["first"])
+        bucket_set.add(fb)
+        grid[fb][r["theme"]].append(r)
+        lb = r.get("last_blast") or ""
+        if lb:
+            bb = bucket_time(lb)
+            bucket_set.add(bb)
+            if bb != fb:
+                marks[bb][r["theme"]].append(("blast", r))
+        lr = r.get("last_reseal") or ""
+        if r["status"] == "zt" and lr and lr != r.get("first"):
+            rb = bucket_time(lr)
+            bucket_set.add(rb)
+            if rb != fb:
+                marks[rb][r["theme"]].append(("reseal", r))
+    buckets = sorted(bucket_set)
     for b in grid:
         for th in grid[b]:
             grid[b][th].sort(key=lambda x: (x["first"], 0 if x["status"] == "zt" else 1, x["code"]))
@@ -1161,29 +1472,46 @@ def render_html(date: str, recs: list[dict], edges: list[list]) -> tuple[str, in
         for th, bg, fg in themes_present:
             parts = []
             for r in grid[b].get(th, []):
-                wk = r["status"] == "zt" and r["seal"] < WEAK_SEAL
+                wk = r["status"] == "zt" and r["seal"] < WEAK_SEAL and int(r.get("open_num") or 0) == 0
                 cls = "c zb" if r["status"] == "zb" else "c zt"
                 if wk:
                     cls += " wk"
-                if r["status"] == "zb":
-                    em = '<em class="r">炸</em>'
-                elif wk:
-                    em = f'<em class="r">{fmt_seal2(r["seal"])} 弱</em>'
-                else:
-                    em = f'<em class="">{fmt_seal2(r["seal"])}</em>'
+                em = card_em_html(r)
                 title = f'→ {name_of[r["to"]]}' if r.get("to") and r["to"] in name_of else ""
                 to = r.get("to") or ""
                 plate = r.get("plate") or plate_of(r["code"])
                 plate_cls = {"主板": "main", "创业": "cy", "科创": "kc", "北证": "bj"}.get(plate, "main")
+                logic = logic_with_times(r)
                 parts.append(
                     f'<button type="button" class="{cls}" id="s-{r["code"]}" '
-                    f'data-to="{to}" data-logic="{html_esc(r["reason"])}" '
+                    f'data-to="{to}" data-logic="{html_esc(logic)}" '
                     f'data-name="{html_esc(r["name"])}" data-code="{r["code"]}" '
                     f'data-meta="{html_esc(r["meta"])}" data-plate="{html_esc(plate)}" '
                     f'style="--bg:{bg};--fg:{fg}" title="{html_esc(title)}">'
                     f'<b>{html_esc(r["name"])}</b>'
                     f'<span class="plate plate-{plate_cls}">{html_esc(plate)}</span>'
                     f'<i>{badge(r)}</i>{em}</button>'
+                )
+            for kind, r in marks[b].get(th, []):
+                plate = r.get("plate") or plate_of(r["code"])
+                logic = logic_with_times(r)
+                if kind == "blast":
+                    ts = (r.get("last_blast") or "")[:5]
+                    mid = f's-{r["code"]}-blast'
+                    cls = "c mk zb-mk"
+                    label = f'{r["name"]} 炸{ts}'
+                else:
+                    ts = (r.get("last_reseal") or "")[:5]
+                    mid = f's-{r["code"]}-reseal'
+                    cls = "c mk hf-mk"
+                    label = f'{r["name"]} 回{ts}'
+                parts.append(
+                    f'<button type="button" class="{cls}" id="{mid}" '
+                    f'data-to="" data-logic="{html_esc(logic)}" '
+                    f'data-name="{html_esc(r["name"])}" data-code="{r["code"]}" '
+                    f'data-meta="{html_esc(r["meta"])}" data-plate="{html_esc(plate)}" '
+                    f'style="--bg:{bg};--fg:{fg}" title="{html_esc(label)}">'
+                    f'<b>{html_esc(label)}</b></button>'
                 )
             cells.append(f'<td class="cell">{"".join(parts)}</td>')
         body_rows.append("<tr>" + "".join(cells) + "</tr>")
@@ -1232,6 +1560,10 @@ td.tm{{position:sticky;left:0;background:#222;color:#0f0;font-weight:800;z-index
 .c.zt{{border-style:solid;border-width:2px;border-color:#000;box-shadow:0 0 0 1px rgba(255,255,255,.35)}}
 .c.zb{{border-style:dashed;border-width:3px;border-color:#ff9100;box-shadow:0 0 0 1px #ffea00,inset 0 0 0 1px rgba(255,145,0,.35);filter:saturate(.9);opacity:1;background-image:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,145,0,.06) 2px,rgba(255,145,0,.06) 4px)}}
 .c.wk{{outline:3px solid #ff0;outline-offset:1px}}
+.c.mk{{padding:2px 5px;margin:0 0 3px;font-size:10px;font-weight:800;width:auto;gap:2px;align-items:center}}
+.c.mk b{{font-size:10px;flex:1;text-align:left}}
+.c.zb-mk{{border-style:dashed;border-width:2px;border-color:#ff9100;background:#3d2800;color:#ffea00;box-shadow:0 0 0 1px #ffea00,inset 0 0 0 1px rgba(255,145,0,.35)}}
+.c.hf-mk{{border-style:solid;border-width:2px;border-color:#00e676;background:#003d1f;color:#b9f6ca;box-shadow:0 0 0 1px #69f0ae}}
 .c em{{font-style:normal;font-size:10px;background:#000;color:#fff;padding:0 3px;border-radius:2px}}
 .c em.r{{background:#ff0;color:#000;font-weight:900}}
 .c:hover{{filter:brightness(1.15);z-index:5}}
@@ -1249,9 +1581,9 @@ td.tm{{position:sticky;left:0;background:#222;color:#0f0;font-weight:800;z-index
 <div class="page">
 <div class="head">
 <h1>{date} 涨停时间轴 · 按涨停逻辑分列</h1>
-<div class="sub">封板{zt_n} · 炸板{zb_n} · 弱封单{wk_n} · 涨停实心边框 · 炸板橙黄虚线框 · 同列逻辑接力（黄实线）· 炸板关联（橙虚线）· 跨列共享逻辑（青实线）· 线上标注原因 · 数据：同花顺封板池 reason_type + 东财封单/时间</div>
+<div class="sub">封板{zt_n} · 炸板{zb_n} · 弱封单{wk_n} · 涨停实心边框 · 炸板橙黄虚线框 · 同列逻辑接力（黄实线）· 炸板关联（橙虚线）· 跨列共享逻辑（青实线）· 线上标注原因 · 数据：同花顺封板池 reason_type + 东财封单/时间/分时推演</div>
 <div class="leg">{leg} · 板别 {plate_leg}</div>
-<div class="key">卡片边框：<b style="color:#fff">涨停实心</b> · <b style="color:#ff9100">炸板虚线</b>（橙黄虚线框）· 黄框=弱封单(&lt;3000万) · 悬停高亮相关线 · 点击看 reason_type｜高位｜板型｜板别 · 每条线中段有原因标签 · 蓝徽=主板 · 橙徽=创业 · 紫徽=科创 · <b>按住拖动平移</b></div>
+<div class="key">卡片边框：<b style="color:#fff">涨停实心</b> · <b style="color:#ff9100">炸板虚线</b>（橙黄虚线框）· 黄框=弱封单(&lt;3000万) · <b style="color:#ff9100">炸</b>/<b style="color:#69f0ae">回</b>=分时推演的炸板与回封标记（同列小标）· 悬停高亮相关线 · 点击看 reason_type｜高位｜板型｜板别 · 每条线中段有原因标签 · 蓝徽=主板 · 橙徽=创业 · 紫徽=科创 · <b>按住拖动平移</b></div>
 </div>
 <div class="wrap" id="wrap">
 <div id="stage">
@@ -1450,6 +1782,7 @@ def main():
 
     block_map = load_block_reason_map(RAW / "ths" / f"block_top_{date_compact}.json")
     recs = build_records(date_compact, block_map)
+    enrich_records_blast_reseal(recs, date)
     chain_within_logic(recs)
     edges = build_edges(recs)
     html, zt_n, zb_n, wk_n, theme_counts = render_html(date, recs, edges)
@@ -1480,6 +1813,10 @@ def main():
                 "limit_type": r["limit_type"],
                 "reason_type": r.get("reason_type") or "",
                 "hybk": r.get("hybk") or "",
+                "blast_times": list(r.get("blast_times") or []),
+                "reseal_times": list(r.get("reseal_times") or []),
+                "last_blast": r.get("last_blast") or "",
+                "last_reseal": r.get("last_reseal") or "",
             }
         )
     audit_out.write_text(json.dumps(audit_list, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -1496,8 +1833,18 @@ def main():
     for e in edges[:8]:
         print(" edge", e)
     # sample reasons
-    for r in recs[:5]:
-        print(" sample", r["code"], r["name"], r["theme"], r.get("sub_logic"), r["reason"][:80])
+    opened = [r for r in recs if int(r.get("open_num") or 0) > 0]
+    for r in (opened[:5] or recs[:5]):
+        print(
+            " sample",
+            r["code"],
+            r["name"],
+            r["theme"],
+            f"blast={r.get('last_blast')}",
+            f"reseal={r.get('last_reseal')}",
+            f"nB={len(r.get('blast_times') or [])}",
+            r["reason"][:60],
+        )
     pc = Counter(r.get("plate") or plate_of(r["code"]) for r in recs)
     print("plates", dict(pc))
     print(f"summary 炸板{zb_n} · 弱封单{wk_n} · 封板{zt_n} · 逻辑列复盘（消费/医药/基建大列归并）")
