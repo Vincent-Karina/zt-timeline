@@ -1,36 +1,99 @@
 <!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>2026-11-16 涨停时间轴（指向相关标的）</title>
+<title>2026-11-16 涨停时间轴</title>
 <style>
-:root{--bg:#000;--panel:#0a0a0a;--text:#fff;--muted:#bbb;--line:#333}
+:root{
+  --bg:#050505;
+  --panel:#111114;
+  --panel-2:#18181c;
+  --text:#f4f4f4;
+  --muted:#9a9a9a;
+  --line:#2c2c30;
+  --gold:#ffd54f;
+  --zt:#69f0ae;
+  --zb:#ff9100;
+  --wk:#ffd54f;
+  --hf:#69f0ae;
+  --xline:#00e5ff;
+}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:#000;color:#fff;font:12px/1.35 "Segoe UI",system-ui,sans-serif}
-.page{height:100vh;display:grid;grid-template-rows:auto 1fr;position:relative}
-.head{padding:8px 12px;background:#111;border-bottom:2px solid #fff}
-h1{margin:0;font-size:16px;color:#fff}
-.sub{color:#ccc;font-size:11px;margin:3px 0}
-.leg{display:flex;flex-wrap:wrap;gap:6px 12px}
+html,body{
+  margin:0;height:100%;background:var(--bg);color:var(--text);
+  font:13px/1.45 "Segoe UI","PingFang SC","Hiragino Sans GB","Noto Sans SC",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.page{height:100vh;display:grid;grid-template-rows:auto 1fr auto;position:relative}
+.head{
+  padding:10px 18px 12px;
+  background:linear-gradient(180deg,#16140f 0%,#111114 100%);
+  border-bottom:1px solid var(--line);
+  box-shadow:inset 0 2px 0 var(--gold);
+}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.brand{
+  color:var(--gold);text-decoration:none;font-weight:750;letter-spacing:.12em;
+  font-size:12px;display:inline-flex;align-items:center;gap:8px;
+}
+.brand i{
+  display:inline-block;width:8px;height:8px;background:var(--gold);border-radius:2px;
+  box-shadow:0 0 8px rgba(255,213,79,.7);
+}
+.top-meta{color:#888;font-size:12px}
+.title-row{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+h1{margin:0;font-size:22px;font-weight:750;letter-spacing:.03em;color:#fff}
+h1 .wd{margin-left:8px;font-size:14px;font-weight:600;color:#aaa}
+.h-stats{display:flex;gap:8px}
+.h-stat{
+  min-width:76px;text-align:center;
+  background:#0a0a0a;border:1px solid #2a2a2a;border-radius:10px;
+  padding:7px 12px 6px;
+}
+.h-stat b{display:block;font-size:22px;font-variant-numeric:tabular-nums;font-weight:800;line-height:1.1}
+.h-stat span{display:block;font-size:10px;letter-spacing:.12em;color:#999;margin-top:3px}
+.h-stat.zt b{color:var(--zt)}
+.h-stat.zb b{color:var(--zb)}
+.h-stat.wk b{color:var(--wk)}
+.sub{display:none}
+.leg{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:10px;align-items:center}
 .lg{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#eee;font-weight:600}
-.lg i{width:12px;height:12px;border-radius:2px;border:1px solid #fff}
-.key{font-size:11px;color:#ddd;margin-top:4px}
-.wrap{overflow:auto;padding:8px;min-height:0;position:relative;background:#000;cursor:grab}
+.lg i{width:10px;height:10px;border-radius:2px;border:1px solid rgba(255,255,255,.45);flex-shrink:0}
+.leg-label{color:#777;font-size:11px;letter-spacing:.1em;margin-left:4px}
+.key{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;font-size:11px;color:#aaa}
+.key .k{
+  display:inline-flex;align-items:center;gap:5px;
+  border:1px solid #2a2a2a;border-radius:999px;padding:2px 9px;background:#0a0a0a;
+}
+.key b{font-weight:700;color:#eee}
+.foot{
+  padding:7px 18px;font-size:11px;color:#777;line-height:1.45;
+  border-top:1px solid var(--line);background:#0c0c0c;
+}
+.wrap{overflow:auto;padding:10px 12px;min-height:0;position:relative;background:var(--bg);cursor:grab}
 .wrap.is-panning{cursor:grabbing;user-select:none;-webkit-user-select:none}
 .wrap.is-panning *{cursor:grabbing!important}
 #stage{position:relative;display:inline-block;min-width:100%}
-table{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;background:#111;position:relative;z-index:1}
-th,td{border:1px solid #444;padding:4px;vertical-align:top}
-th{background:#1a1a1a;color:#fff;position:sticky;top:0;z-index:3;font-size:11px;min-width:120px;max-width:160px;border-bottom:2px solid #fff}
-th .arr{display:block;font-weight:500;color:#ff0;font-size:10px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-td.tm{position:sticky;left:0;background:#222;color:#0f0;font-weight:800;z-index:2;white-space:nowrap;min-width:48px;border-right:2px solid #0f0}
-.c{display:flex;align-items:center;gap:4px;width:100%;margin:0 0 4px;padding:5px 6px;border-radius:4px;border:2px solid #000;background:var(--bg);color:var(--fg);cursor:pointer;font:inherit;font-weight:700}
+table{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;background:#111114;position:relative;z-index:1}
+th,td{border:1px solid #2c2c30;padding:5px 6px;vertical-align:top}
+th{
+  background:#18181c;color:#fff;position:sticky;top:0;z-index:3;
+  font-size:12px;min-width:128px;max-width:168px;border-bottom:1px solid #444;
+  letter-spacing:.02em;
+}
+th .arr{display:block;font-weight:500;color:var(--gold);font-size:10px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.9}
+td.tm{
+  position:sticky;left:0;background:#121814;color:var(--zt);font-weight:800;
+  z-index:2;white-space:nowrap;min-width:52px;border-right:2px solid #1b5e20;
+  font-variant-numeric:tabular-nums;
+}
+.c{display:flex;align-items:center;gap:4px;width:100%;margin:0 0 5px;padding:6px 7px;border-radius:6px;border:2px solid #000;background:var(--bg);color:var(--fg);cursor:pointer;font:inherit;font-weight:700}
 .c b{flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:inherit}
-.c i{font-style:normal;font-size:10px;background:#000;color:#ff0;padding:0 3px;border-radius:2px}
+.c i{font-style:normal;font-size:10px;background:#000;color:#ffd54f;padding:0 3px;border-radius:2px}
 .c .plate{font-style:normal;font-size:10px;font-weight:900;padding:1px 4px;border-radius:3px;border:1px solid #fff;letter-spacing:.02em;flex-shrink:0}
 .c .plate-main{background:#1565c0;color:#fff}
 .c .plate-cy{background:#ff6d00;color:#000}
 .c .plate-kc{background:#aa00ff;color:#fff}
 .c .plate-bj{background:#546e7a;color:#fff}
-.plate-leg{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:4px}
+.plate-leg{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:2px}
 .plate-leg .pl{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#eee}
 .plate-leg .pl span{font-size:10px;font-weight:900;padding:1px 5px;border-radius:3px;border:1px solid #fff}
 .plate-leg .pl .plate-main{background:#1565c0;color:#fff}
@@ -39,33 +102,39 @@ td.tm{position:sticky;left:0;background:#222;color:#0f0;font-weight:800;z-index:
 .plate-leg .pl .plate-bj{background:#546e7a;color:#fff}
 .c.zt{border-style:solid;border-width:2px;border-color:#000;box-shadow:0 0 0 1px rgba(255,255,255,.35)}
 .c.zb{border-style:dashed;border-width:3px;border-color:#ff9100;box-shadow:0 0 0 1px #ffea00,inset 0 0 0 1px rgba(255,145,0,.35);filter:saturate(.9);opacity:1;background-image:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,145,0,.06) 2px,rgba(255,145,0,.06) 4px)}
-.c.wk{outline:3px solid #ff0;outline-offset:1px}
+.c.wk{outline:3px solid #ffd54f;outline-offset:1px}
 .c.mk{padding:2px 5px;margin:0 0 3px;font-size:10px;font-weight:800;width:auto;gap:2px;align-items:center}
 .c.mk b{font-size:10px;flex:1;text-align:left}
 .c.zb-mk{border-style:dashed;border-width:2px;border-color:#ff9100;background:#3d2800;color:#ffea00;box-shadow:0 0 0 1px #ffea00,inset 0 0 0 1px rgba(255,145,0,.35)}
 .c.hf-mk{border-style:solid;border-width:2px;border-color:#00e676;background:#003d1f;color:#b9f6ca;box-shadow:0 0 0 1px #69f0ae}
 .c em{font-style:normal;font-size:10px;background:#000;color:#fff;padding:0 3px;border-radius:2px}
-.c em.r{background:#ff0;color:#000;font-weight:900}
+.c em.r{background:#ffd54f;color:#000;font-weight:900}
 .c:hover{filter:brightness(1.15);z-index:5}
 #arrows{position:absolute;left:0;top:0;pointer-events:none;z-index:4;overflow:visible}
-.mask{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:40;padding:16px}
+.mask{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;z-index:40;padding:16px;backdrop-filter:blur(4px)}
 .mask.on{display:flex}
-.dlg{width:min(440px,100%);background:#1a1a1a;border:2px solid #fff;border-radius:8px;padding:14px}
-.dlg h2{margin:0 0 4px;font-size:15px;color:#fff}
-.dlg .meta{color:#ff0;font-size:11px;margin-bottom:8px}
-.dlg .logic{background:#000;border:1px solid #555;border-radius:6px;padding:10px;line-height:1.55;white-space:pre-wrap;color:#eee}
-.dlg button{margin-top:10px;width:100%;padding:8px;border:0;border-radius:6px;background:#ff0;color:#000;font-weight:800;cursor:pointer}
-
-.edge-lab{font:10px/1.2 "Segoe UI",system-ui,sans-serif;fill:#fff;paint-order:stroke;stroke:#000;stroke-width:3px;stroke-linejoin:round;pointer-events:none}
+.dlg{width:min(460px,100%);background:#161616;border:1px solid #3a3a3a;border-radius:14px;padding:16px 18px;box-shadow:0 16px 48px rgba(0,0,0,.55)}
+.dlg h2{margin:0 0 4px;font-size:17px;color:#fff;font-weight:750}
+.dlg .meta{color:var(--gold);font-size:12px;margin-bottom:10px}
+.dlg .logic{background:#0a0a0a;border:1px solid #2a2a2a;border-radius:10px;padding:12px;line-height:1.6;white-space:pre-wrap;color:#eee}
+.dlg button{margin-top:12px;width:100%;padding:9px;border:0;border-radius:999px;background:var(--gold);color:#111;font-weight:800;cursor:pointer;font-size:13px}
+.dlg button:hover{filter:brightness(1.06)}
+.edge-lab{font:10px/1.2 "Segoe UI","PingFang SC",system-ui,sans-serif;fill:#fff;paint-order:stroke;stroke:#000;stroke-width:3px;stroke-linejoin:round;pointer-events:none}
+@media (max-width:720px){
+  .head{padding:8px 12px 10px}
+  h1{font-size:18px}
+  .h-stat{min-width:64px;padding:6px 8px 5px}
+  .h-stat b{font-size:18px}
+}
 
 /* ZOOM_CSS_START */
-.zoombar{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:6px;border-top:1px solid #333;flex-wrap:wrap}
-.zoombar button{appearance:none;background:#ff0;color:#000;border:2px solid #fff;border-radius:6px;font:inherit;font-weight:900;font-size:14px;cursor:pointer;min-height:36px;padding:4px 12px;line-height:1.1}
-.zoombar button:hover{filter:brightness(1.06)}
-.zoombar button:disabled{opacity:.35;cursor:default;filter:none}
-.zoombar button:focus-visible{outline:2px solid #0ff;outline-offset:2px}
-#zoom-pct{min-width:64px;text-align:center;font-weight:900;color:#ff0;font-size:16px;font-variant-numeric:tabular-nums;background:#000;border:1px solid #888;border-radius:6px;padding:6px 8px}
-.zoom-hint{color:#ccc;font-size:11px;font-weight:600}
+.zoombar{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid #2c2c30;flex-wrap:wrap}
+.zoombar button{appearance:none;background:#1a1a1a;color:#f4f4f4;border:1px solid #3a3a3a;border-radius:999px;font:inherit;font-weight:700;font-size:12px;cursor:pointer;min-height:32px;padding:4px 12px;line-height:1.1}
+.zoombar button:hover{border-color:#ffd54f;color:#ffd54f}
+.zoombar button:disabled{opacity:.35;cursor:default;filter:none;border-color:#3a3a3a;color:#f4f4f4}
+.zoombar button:focus-visible{outline:2px solid #ffd54f;outline-offset:2px}
+#zoom-pct{min-width:56px;text-align:center;font-weight:800;color:#ffd54f;font-size:13px;font-variant-numeric:tabular-nums;background:#0a0a0a;border:1px solid #2a2a2a;border-radius:999px;padding:6px 10px}
+.zoom-hint{color:#888;font-size:11px;font-weight:600}
 #stage.is-scaled{min-width:0}
 #stage.is-scaled > table{min-width:max-content;width:max-content}
 .wrap{touch-action:pan-x pan-y}
@@ -73,17 +142,36 @@ td.tm{position:sticky;left:0;background:#222;color:#0f0;font-weight:800;z-index:
 </style></head><body>
 <div class="page">
 <div class="head">
-<h1>2026-11-16 涨停时间轴 · 按涨停逻辑分列</h1>
-<div class="sub">封板32 · 炸板16 · 弱封单13 · 涨停实心边框 · 炸板橙黄虚线框 · 同列逻辑接力（黄实线）· 炸板关联（橙虚线）· 跨列共享逻辑（青实线）· 线上标注原因 · 数据：同花顺封板池 reason_type + 东财封单/时间/分时推演</div>
-<div class="leg"><span class="lg"><i style="background:#ff9100"></i>大消费13</span><span class="lg"><i style="background:#ea80fc"></i>AI影视/传媒9</span><span class="lg"><i style="background:#00c853"></i>电池产业链4</span><span class="lg"><i style="background:#00bcd4"></i>半导体4</span><span class="lg"><i style="background:#78909c"></i>其他18</span> · 板别 <span class="plate-leg" title="按 A 股代码板别"><span class="pl"><span class="plate-main">主板</span>46</span><span class="pl"><span class="plate-cy">创业</span>2</span><span class="pl"><span class="plate-kc">科创</span>0</span></span></div>
-<div class="key">卡片边框：<b style="color:#fff">涨停实心</b> · <b style="color:#ff9100">炸板虚线</b>（橙黄虚线框）· 黄框=弱封单(&lt;3000万) · <b style="color:#ff9100">炸</b>/<b style="color:#69f0ae">回</b>=分时推演的炸板与回封标记（同列小标）· 悬停高亮相关线 · 点击看 reason_type｜高位｜板型｜板别 · 每条线中段有原因标签 · 蓝徽=主板 · 橙徽=创业 · 紫徽=科创 · <b>按住拖动平移</b></div>
+<div class="topbar">
+  <a class="brand" href="https://vincent-karina.github.io/zt-timeline/"><i></i>涨停时间轴</a>
+  <div class="top-meta">按涨停逻辑分列</div>
+</div>
+<div class="title-row">
+  <h1>2026年11月16日<span class="wd">周一</span></h1>
+  <div class="h-stats">
+    <div class="h-stat zt"><b>32</b><span>封板</span></div>
+    <div class="h-stat zb"><b>16</b><span>炸板</span></div>
+    <div class="h-stat wk"><b>13</b><span>弱封单</span></div>
+  </div>
+</div>
+<div class="leg"><span class="lg"><i style="background:#ff9100"></i>大消费 13</span><span class="lg"><i style="background:#ea80fc"></i>AI影视/传媒 9</span><span class="lg"><i style="background:#00c853"></i>电池产业链 4</span><span class="lg"><i style="background:#00bcd4"></i>半导体 4</span><span class="lg"><i style="background:#78909c"></i>其他 18</span><span class="leg-label">板别</span><span class="plate-leg" title="按 A 股代码板别"><span class="pl"><span class="plate-main">主板</span>46</span><span class="pl"><span class="plate-cy">创业</span>2</span><span class="pl"><span class="plate-kc">科创</span>0</span></span></div>
+<div class="key">
+  <span class="k"><b style="color:#fff">实心</b>涨停封板</span>
+  <span class="k"><b style="color:#ff9100">虚线</b>炸板未回封</span>
+  <span class="k"><b style="color:#ffd54f">黄框</b>弱封单&lt;3000万</span>
+  <span class="k"><b style="color:#ffd54f">黄线</b>同列接力</span>
+  <span class="k"><b style="color:#ff9100">橙虚线</b>炸板关联</span>
+  <span class="k"><b style="color:#00e5ff">青线</b>跨列共享逻辑</span>
+  <span class="k"><b style="color:#ff9100">炸</b>/<b style="color:#69f0ae">回</b>分时标记</span>
+  <span class="k">点击卡片看逻辑 · 按住拖动 · 滚轮缩放</span>
+</div>
 <!-- ZOOM_BAR_START -->
 <div class="zoombar" id="zoombar">
   <button type="button" id="zoom-out" title="缩小">－ 缩小</button>
   <span id="zoom-pct" aria-live="polite" title="当前缩放比例">100%</span>
   <button type="button" id="zoom-in" title="放大">＋ 放大</button>
   <button type="button" id="zoom-reset" title="回到默认比例">重置</button>
-  <span class="zoom-hint">默认按视口宽度适配 · Ctrl/⌘+滚轮缩放 · 按住拖动平移</span>
+  <span class="zoom-hint">适配视口 · Ctrl/⌘+滚轮缩放 · 按住拖动平移</span>
 </div>
 <!-- ZOOM_BAR_END -->
 </div>
@@ -107,7 +195,7 @@ td.tm{position:sticky;left:0;background:#222;color:#0f0;font-weight:800;z-index:
 </tbody></table>
 </div>
 </div>
-</div>
+<div class="foot">数据来自同花顺封板池与东方财富公开接口；题材列参考韭研公社全天涨停简图。本页为复盘工具，不构成投资建议。</div></div>
 <div class="mask" id="mask"><div class="dlg">
 <h2 id="p-name"></h2><div class="meta" id="p-meta"></div><div class="logic" id="p-logic"></div>
 <button type="button" id="p-close">关闭</button>

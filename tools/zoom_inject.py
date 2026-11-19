@@ -12,13 +12,13 @@ NEW_DRAW_SIZE = """  const table = document.getElementById('grid');
   const H = table.offsetHeight;"""
 
 ZOOM_CSS = """/* ZOOM_CSS_START */
-.zoombar{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:6px;border-top:1px solid #333;flex-wrap:wrap}
-.zoombar button{appearance:none;background:#ff0;color:#000;border:2px solid #fff;border-radius:6px;font:inherit;font-weight:900;font-size:14px;cursor:pointer;min-height:36px;padding:4px 12px;line-height:1.1}
-.zoombar button:hover{filter:brightness(1.06)}
-.zoombar button:disabled{opacity:.35;cursor:default;filter:none}
-.zoombar button:focus-visible{outline:2px solid #0ff;outline-offset:2px}
-#zoom-pct{min-width:64px;text-align:center;font-weight:900;color:#ff0;font-size:16px;font-variant-numeric:tabular-nums;background:#000;border:1px solid #888;border-radius:6px;padding:6px 8px}
-.zoom-hint{color:#ccc;font-size:11px;font-weight:600}
+.zoombar{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid #2c2c30;flex-wrap:wrap}
+.zoombar button{appearance:none;background:#1a1a1a;color:#f4f4f4;border:1px solid #3a3a3a;border-radius:999px;font:inherit;font-weight:700;font-size:12px;cursor:pointer;min-height:32px;padding:4px 12px;line-height:1.1}
+.zoombar button:hover{border-color:#ffd54f;color:#ffd54f}
+.zoombar button:disabled{opacity:.35;cursor:default;filter:none;border-color:#3a3a3a;color:#f4f4f4}
+.zoombar button:focus-visible{outline:2px solid #ffd54f;outline-offset:2px}
+#zoom-pct{min-width:56px;text-align:center;font-weight:800;color:#ffd54f;font-size:13px;font-variant-numeric:tabular-nums;background:#0a0a0a;border:1px solid #2a2a2a;border-radius:999px;padding:6px 10px}
+.zoom-hint{color:#888;font-size:11px;font-weight:600}
 #stage.is-scaled{min-width:0}
 #stage.is-scaled > table{min-width:max-content;width:max-content}
 .wrap{touch-action:pan-x pan-y}
@@ -30,7 +30,7 @@ ZOOM_BAR = """<!-- ZOOM_BAR_START -->
   <span id="zoom-pct" aria-live="polite" title="当前缩放比例">100%</span>
   <button type="button" id="zoom-in" title="放大">＋ 放大</button>
   <button type="button" id="zoom-reset" title="回到默认比例">重置</button>
-  <span class="zoom-hint">默认按视口宽度适配 · Ctrl/⌘+滚轮缩放 · 按住拖动平移</span>
+  <span class="zoom-hint">适配视口 · Ctrl/⌘+滚轮缩放 · 按住拖动平移</span>
 </div>
 <!-- ZOOM_BAR_END -->"""
 

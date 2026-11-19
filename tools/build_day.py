@@ -2,12 +2,14 @@
 """Build 涨停时间轴复盘 HTML — columns by 涨停逻辑 (reason_type), not industry.
 
 大列 vs 子逻辑：
-  - 列名（theme）可为视觉归并大列：消费 / 医药 / 基建（见 SUB_TO_BUCKET）。
+  - 列名（theme）可为视觉归并大列：消费 / 医药 / 商业航天 / AI硬件 / 机器人 / 三季报 / 基建（见 SUB_TO_BUCKET）。
   - 每条记录保留 sub_logic（细逻辑）：箭头匹配与线上标签按子逻辑；
     卡片 reason 文案仍写各自主要涨停原因，禁止只写「消费」「医药」糊弄。
   - 同列黄实线接力：仅连共享子逻辑的票（如两只都是对台贸易 →「对台贸易接力」）；
     禁止「同题材接力·消费/大消费/医药」等伪串线。
-  - 未入 SUB_TO_BUCKET 的细逻辑各自成列。
+  - 未入 SUB_TO_BUCKET / 当日大列的细逻辑归「其他」。
+  - 羊字辈降级：有明确产业主线时 theme 归主线，羊只进 reason/关键词。
+  - 禁止列名「独立逻辑」；当日韭研大列可含「大消费」「其他」。
 
 Usage:
   python3 /workspace/zt-raw/build_day.py [--date 2026-10-21]
@@ -39,6 +41,11 @@ try:
     from zoom_inject import ensure_zoom
 except ImportError:  # pragma: no cover
     ensure_zoom = None
+try:
+    from page_theme import DAY_CSS, FOOT_HTML, head_html
+except ImportError:  # pragma: no cover
+    DAY_CSS = FOOT_HTML = None
+    head_html = None
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -58,149 +65,347 @@ LIMIT_TOL = 0.01
 TRENDS_WORKERS = 6
 
 # (logic_name, bg, fg) — order = 列序
-# 大列=视觉归并（消费/医药/基建）；细逻辑经 SUB_TO_BUCKET 映射进大列。
-# 箭头与卡片文案仍按 sub_logic；禁止列名「大消费」「独立逻辑」「其他」。
+# 大列=当日韭研简图大列；细逻辑经 SUB_TO_BUCKET 映射；尾部微列并入其他。
+# 箭头与卡片文案仍按 sub_logic；禁止「独立逻辑」糊桶，禁止伪串线。
+# 2026-11-12 韭研大列（左→右=简图上→下）。
 LOGIC_PALETTE = [
-    # 1 连板情绪
-    ("羊字辈", "#ffd600", "#001"),
-    # 2 机器人/低空
-    ("人形机器人", "#ff1744", "#fff"),
-    ("工业机器人", "#ff5252", "#fff"),
-    ("端侧AI", "#f50057", "#fff"),
-    ("飞行汽车", "#00b0ff", "#001"),
-    ("低空经济", "#40c4ff", "#001"),
-    # 3 传媒
-    ("短剧传媒", "#f50057", "#fff"),
-    # 4 算力/数据/光通信
-    ("词元算力", "#ff6d00", "#001"),
-    ("数据要素", "#eceff1", "#111"),
-    ("AI智能体", "#d500f9", "#fff"),
-    ("光模块材料", "#2979ff", "#fff"),
-    ("CPO光模块", "#304ffe", "#fff"),
-    ("卫星通信", "#651fff", "#fff"),
-    ("安防AI", "#c6ff00", "#001"),
-    ("AI设计", "#ea80fc", "#001"),
-    # 5 消费大列（益生菌/生猪养殖/对台贸易/商贸零售）
-    ("消费", "#ff9100", "#001"),
-    # 6 医药大列（中药创新药/抗癌药物/化学制药/生物医药/创新药）
-    ("医药", "#e040fb", "#fff"),
-    # 7 材料/新能源
-    ("MLCC", "#00bfa5", "#001"),
-    ("锂电重组", "#00e5ff", "#001"),
-    ("光伏BC", "#1de9b6", "#001"),
-    ("半导体材料", "#00bcd4", "#001"),
-    ("涤纶长丝", "#80d8ff", "#001"),
-    ("氯聚合物", "#26c6da", "#001"),
-    ("数字能源", "#69f0ae", "#001"),
-    # 8 军工/基建/油气（基建=水泥基建+盾构风电）
-    ("油气装备", "#8d6e63", "#fff"),
-    ("军工装备", "#5d4037", "#fff"),
-    ("基建", "#6d4c41", "#fff"),
+    # 2026-11-18 韭研全天简图大列（左→右=简图上→下）
+    ("国产算力", "#7c4dff", "#fff"),
+    ("AI硬件", "#00bcd4", "#001"),
+    ("家电", "#ff9100", "#001"),
+    ("机器人", "#2979ff", "#fff"),
+    ("光刻机（胶）", "#ff1744", "#fff"),
+    ("其他", "#78909c", "#fff"),
 ]
+
 
 LOGIC_COLOR = {n: (bg, fg) for n, bg, fg in LOGIC_PALETTE}
 
-# Fine logic → visual bucket column. Unmapped sub_logics stay as their own columns.
+# Fine logic → visual bucket column. Unmapped / tail micros go to 其他.
 SUB_TO_BUCKET = {
-    "益生菌": "消费",
-    "生猪养殖": "消费",
-    "对台贸易": "消费",
-    "商贸零售": "消费",
-    "中药创新药": "医药",
-    "抗癌药物": "医药",
-    "化学制药": "医药",
-    "生物医药": "医药",
-    "创新药": "医药",
-    "水泥基建": "基建",
-    "盾构风电": "基建",
-    "路桥基建": "基建",
+    # —— 国产算力 ——
+    "国产算力": "国产算力", "算力": "国产算力", "华为算力": "国产算力", "昇腾算力": "国产算力",
+    "华为昇腾": "国产算力", "智算中心": "国产算力", "液冷算力": "国产算力", "液冷": "国产算力",
+    "液冷服务器": "国产算力", "算力服务": "国产算力", "算力租赁": "国产算力", "算力服务器": "国产算力",
+    "算力系统服务": "国产算力", "智算平台": "国产算力", "词元出海": "国产算力", "词元算力": "国产算力",
+    "数据中心": "国产算力", "数据中心电源": "国产算力", "国产GPU": "国产算力", "TGU推理芯片": "国产算力",
+    "鸿华算力引擎": "国产算力", "高速背板连接器": "国产算力", "云计算": "国产算力",
+    "DeepSeek概念": "国产算力", "AI智能体": "国产算力",
+    # —— AI硬件 ——
+    "AI硬件": "AI硬件", "PCB": "AI硬件", "ABF载板": "AI硬件", "CPO": "AI硬件", "CPO检测": "AI硬件",
+    "CPO概念": "AI硬件", "光通信": "AI硬件", "铜缆高速连接": "AI硬件", "7N高纯铜": "AI硬件",
+    "ITO靶材": "AI硬件",
+    # —— 家电 ——
+    "家电": "家电", "小家电": "家电", "家用电器": "家电", "厨卫电器": "家电", "厨房小家电": "家电",
+    "家电零部件": "家电", "家电出口": "家电", "白色家电": "家电", "黑色家电": "家电",
+    "空调出口": "家电", "母婴小家电": "家电",
+    # —— 机器人 ——
+    "机器人": "机器人", "人形机器人": "机器人", "机器视觉": "机器人", "机器狗": "机器人",
+    "宇树合作": "机器人", "工业机器人": "机器人", "具身机器人": "机器人", "减速器": "机器人",
+    # —— 光刻机（胶）——
+    "光刻机（胶）": "光刻机（胶）", "光刻机": "光刻机（胶）", "光刻胶": "光刻机（胶）",
+    "光刻胶配套试剂": "光刻机（胶）", "光刻机冷却系统": "光刻机（胶）",
+    "光刻胶用显影液": "光刻机（胶）", "光刻机寄售维修": "光刻机（胶）",
+    "光刻机光源": "光刻机（胶）", "光刻胶重要单体": "光刻机（胶）",
+    "湿电子化学品": "光刻机（胶）", "电子化学": "光刻机（胶）", "光源光学": "光刻机（胶）",
+    # —— 其他（尾部及其余）——
+    "公告": "其他", "控制权拟变更": "其他", "AI安全": "其他",
+    "氯化铵涨价": "其他", "空冷器": "其他", "商业航天": "其他",
+    "消费电子": "其他", "金属镍": "其他", "民爆": "其他",
+    "影视院线": "其他", "影视传媒": "其他", "游戏": "其他",
+    "房屋建设": "其他", "农药": "其他", "新材料": "其他",
+    "华为概念": "其他", "光学光电": "其他", "光伏": "其他", "储能": "其他",
+    "化学制药": "其他", "陶瓷纤维": "其他", "太空算力": "其他",
+    "低空经济": "其他", "成品油": "其他", "装修装饰": "其他", "装修建材": "其他",
+    "6G": "其他", "汽车整车": "其他", "工业母机": "其他", "智能电网": "其他",
+    "家居用品": "其他", "冰雪经济": "其他", "焦炭": "其他", "制冷空调": "其他",
+    "物流": "其他", "汽车零部件": "其他", "电力": "其他", "变压器": "其他",
+    "电网设备": "其他", "大消费": "其他", "半导体": "其他", "端侧AI": "其他",
+    "其他": "其他",
 }
+
 BUCKET_NAMES = frozenset(SUB_TO_BUCKET.values())
 
 
+JIUYAN_BIG_COLUMNS = frozenset({
+    "国产算力", "AI硬件", "家电", "机器人", "光刻机（胶）", "其他",
+})
+
+
 def apply_theme_bucket(rec: dict) -> None:
-    """Keep fine logic in sub_logic; map theme to visual bucket when applicable."""
-    sub = (rec.get("sub_logic") or rec.get("theme") or "").strip()
-    if not sub:
-        sub = "个股逻辑"
-    # If theme was already a bucket name somehow, keep prior sub_logic
-    if sub in BUCKET_NAMES and rec.get("sub_logic") and rec["sub_logic"] not in BUCKET_NAMES:
-        sub = rec["sub_logic"]
-    rec["sub_logic"] = sub
-    rec["theme"] = SUB_TO_BUCKET.get(sub, sub)
+    """2026-11-18：顶栏=韭研大列（国产算力/AI硬件/家电/机器人/光刻机（胶）/其他）；卡片保留细逻辑。"""
+    banned = ("独立逻辑",)
+    raw_theme = (rec.get("theme") or "").strip()
+    raw_sub = (rec.get("sub_logic") or "").strip()
+    reason = (rec.get("reason_type") or "").strip()
+
+    fine = raw_sub
+    if not fine or fine in JIUYAN_BIG_COLUMNS or fine in banned:
+        if reason and reason not in JIUYAN_BIG_COLUMNS and reason not in banned:
+            fine = reason.split("+")[0].strip() or reason
+        elif raw_theme and raw_theme not in JIUYAN_BIG_COLUMNS and raw_theme not in banned:
+            fine = raw_theme
+        else:
+            fine = reason.split("+")[0].strip() if reason else (raw_theme or "个股逻辑")
+    for b in banned:
+        if fine == b or fine.startswith(b):
+            fine = "个股逻辑"
+            break
+    # 羊字辈降级为关键词：细逻辑若仅羊字辈则保留文案，但下面进大列时不靠它成列
+    rec["sub_logic"] = fine
+
+    theme = None
+    if raw_theme in JIUYAN_BIG_COLUMNS:
+        theme = raw_theme
+    elif raw_theme in SUB_TO_BUCKET:
+        theme = SUB_TO_BUCKET[raw_theme]
+    elif fine in SUB_TO_BUCKET:
+        theme = SUB_TO_BUCKET[fine]
+    else:
+        blob = "+".join([reason, raw_theme, fine] + list(rec.get("tags") or []))
+        for key, bucket in SUB_TO_BUCKET.items():
+            if bucket == "其他":
+                continue
+            if key and key in blob:
+                theme = bucket
+                break
+    if theme in banned or theme is None:
+        theme = "其他"
+    if theme not in JIUYAN_BIG_COLUMNS:
+        theme = SUB_TO_BUCKET.get(theme, "其他")
+        if theme not in JIUYAN_BIG_COLUMNS:
+            theme = "其他"
+    rec["theme"] = theme
 
 
-# Hard reclass by code (2026-10-21 + reusable). theme required; optional inject_tags / zb_reason.
 CODE_OVERRIDES: dict[str, dict] = {
-    "001201": {"theme": "生猪养殖"},
-    "603629": {"theme": "词元算力"},
-    "301486": {
-        "theme": "CPO光模块",
-        "inject_tags": ["CPO概念", "光纤概念", "消费电子零部件及组装", "通信技术"],
-        "zb_reason": "CPO+光纤概念+消费电子零部件｜冲板未回封｜炸×{open_num}",
-    },
-    "002811": {"theme": "AI设计", "inject_tags": ["AI设计", "半导体入股"]},
-    "002420": {"theme": "人形机器人", "inject_tags": ["人形机器人", "机器人概念"]},
-    "605488": {"theme": "人形机器人", "inject_tags": ["人形机器人", "机器人概念"]},
-    "002355": {
-        "theme": "低空经济",
-        "inject_tags": ["低空经济", "华为概念", "算力概念", "通信技术"],
-    },
+    "000017": {"theme": "黄金珠宝", "inject_tags": ["黄金珠宝", "黄金", "深中华A"]},
     "000032": {"theme": "AI智能体", "inject_tags": ["AI智能体", "DeepSeek概念"]},
-    "002549": {
-        "theme": "半导体材料",
-        "inject_tags": ["工业气体", "氦气概念", "半导体概念"],
-    },
-    "002865": {"theme": "光伏BC", "inject_tags": ["BC电池", "光伏设备"]},
-    "603058": {"theme": "半导体材料", "inject_tags": ["半导体概念", "包装印刷"]},
-    "000592": {"theme": "对台贸易", "inject_tags": ["对台贸易", "福建板块"]},
-    "601566": {"theme": "对台贸易", "inject_tags": ["海峡两岸", "对台贸易"]},
-    "603696": {"theme": "对台贸易", "inject_tags": ["对台贸易"]},
-    "600838": {"theme": "商贸零售", "inject_tags": ["商贸零售", "商业地产"]},
-    "603838": {"theme": "商贸零售", "inject_tags": ["商贸零售", "家居用品"]},
-    "600293": {"theme": "锂电重组", "inject_tags": ["重大重组", "锂电电解液"]},
-    "001216": {"theme": "MLCC", "inject_tags": ["MLCC粉体", "MLCC"]},
-    "603332": {"theme": "涤纶长丝", "inject_tags": ["差别化涤纶长丝", "涤纶"]},
-    "600319": {"theme": "氯聚合物", "inject_tags": ["氯聚合物", "氯碱", "CPE"]},
-    "002353": {"theme": "油气装备", "inject_tags": ["油气装备"]},
-    "002535": {"theme": "军工装备", "inject_tags": ["军工", "军工装备"]},
-    # 医药拆列（禁止糊桶「医药」）
-    "000788": {"theme": "化学制药"},
-    "603351": {"theme": "化学制药", "inject_tags": ["化学制药"]},
-    "600252": {"theme": "中药创新药"},
-    "300006": {"theme": "抗癌药物"},
+    "000096": {"theme": "成品油", "inject_tags": ["成品油", "广聚能源"]},
+    "000419": {"theme": "消费", "inject_tags": ["消费"]},
+    "000426": {"theme": "白银", "inject_tags": ["白银", "兴业银锡"]},
+    "000506": {"theme": "黄金", "inject_tags": ["黄金", "黄金", "招金黄金"]},
     "000518": {"theme": "生物医药"},
-    "002940": {"theme": "创新药", "inject_tags": ["创新药"]},
-    # 基建拆列（禁止糊桶「基建工程」）
-    "600802": {"theme": "水泥基建"},
+    "000525": {"theme": "农药", "inject_tags": ["百草枯", "农药"]},
+    "000530": {"theme": "冰雪经济", "inject_tags": ["冰雪经济", "消费", "冰山冷热"]},
+    "000592": {"theme": "对台贸易", "inject_tags": ["对台贸易", "福建板块"]},
+    "000596": {"theme": "白酒", "inject_tags": ["白酒", "中期分红"]},
+    "000603": {"theme": "黄金", "inject_tags": ["黄金", "黄金", "盛达资源"]},
+    "000636": {"theme": "PCB", "inject_tags": ["PCB"]},
+    "000657": {"theme": "PCB钻针", "inject_tags": ["PCB钻针", "PCB", "中钨高新"]},
+    "000679": {"theme": "商贸零售", "inject_tags": ["商贸零售", "消费", "大连友谊"]},
+    "000788": {"theme": "化学制药"},
+    "000919": {"theme": "创新药", "inject_tags": ["创新药", "医药", "金陵药业"]},
+    "000962": {"theme": "半导体靶材", "inject_tags": ["半导体靶材", "半导体", "东方钽业"]},
+    "000975": {"theme": "黄金", "inject_tags": ["黄金", "黄金", "山金国际"]},
+    "000995": {"theme": "消费", "inject_tags": ["消费", "白酒"]},
+    "001201": {"theme": "生猪养殖"},
+    "001216": {"theme": "MLCC", "inject_tags": ["MLCC粉体", "MLCC"]},
+    "001219": {"theme": "三季报增长", "inject_tags": ["三季报增长", "青啤拟入主", "休闲食品"]},
+    "001233": {"theme": "次新股", "inject_tags": ["次新股", "次新", "海安集团"]},
     "001239": {"theme": "盾构风电"},
-    # 2026-10-23 zb concept/hybk orphans → fine logic (no name-as-column)
-    "001282": {
-        "theme": "人形机器人",
-        "inject_tags": ["减速器", "人形机器人", "小米汽车"],
-        "zb_reason": "冲板未回封｜减速器+小米汽车+液冷服务器｜炸×{open_num}",
-    },
-    "603186": {
-        "theme": "半导体材料",
-        "inject_tags": ["半导体概念", "PCB", "印制电路板"],
-        "zb_reason": "冲板未回封｜PCB+半导体概念+印制电路板｜炸×{open_num}",
-    },
-    "002307": {
-        "theme": "路桥基建",
-        "inject_tags": ["基础建设", "基建市政工程"],
-        "zb_reason": "冲板未回封｜基础建设+基建市政工程｜炸×{open_num}",
-    },
-    "001360": {
-        "theme": "工业机器人",
-        "inject_tags": ["专用设备", "能源及重型设备"],
-        "zb_reason": "冲板未回封｜专用设备+能源及重型设备｜炸×{open_num}",
-    },
-    "603600": {
-        "theme": "商贸零售",
-        "inject_tags": ["家居用品", "跨境电商"],
-        "zb_reason": "冲板未回封｜家居用品+跨境电商｜炸×{open_num}",
-    },
+    "001282": {"theme": "人形机器人", "inject_tags": ["人形机器人", "机器人", "三联锻造"], "zb_reason": "冲板未回封｜减速器+小米汽车+液冷服务器｜炸×{open_num}"},
+    "001337": {"theme": "黄金采选", "inject_tags": ["黄金采选", "黄金", "四川黄金"]},
+    "001339": {"theme": "物理AI", "inject_tags": ["物理AI", "物理AI", "智微智能"]},
+    "001359": {"theme": "电子布", "inject_tags": ["电子布", "PCB", "平安电工"]},
+    "001360": {"theme": "金矿并购", "inject_tags": ["金矿并购", "黄金", "南矿集团"], "zb_reason": "冲板未回封｜专用设备+能源及重型设备｜炸×{open_num}"},
+    "001389": {"theme": "算力PCB", "inject_tags": ["算力PCB", "PCB", "广合科技"]},
+    "002008": {"theme": "PCB设备", "inject_tags": ["PCB设备", "PCB", "大族激光"]},
+    "002029": {"theme": "消费", "inject_tags": ["消费"]},
+    "002058": {"theme": "固态电池", "inject_tags": ["固态电池", "电池产业链", "紫竹高科"]},
+    "002081": {"theme": "半导体洁净室", "inject_tags": ["半导体洁净室", "半导体", "金螳螂"]},
+    "002086": {"theme": "水产品", "inject_tags": ["水产品", "海参养殖"]},
+    "002088": {"theme": "陶瓷纤维", "inject_tags": ["陶瓷纤维", "鲁阳节能"]},
+    "002150": {"theme": "光伏", "inject_tags": ["光伏"]},
+    "002155": {"theme": "黄金", "inject_tags": ["黄金", "黄金", "湖南黄金"]},
+    "002156": {"theme": "先进封装", "inject_tags": ["先进封装", "半导体", "通富微电"]},
+    "002172": {"theme": "脑机接口", "inject_tags": ["脑机接口", "医疗服务"]},
+    "002222": {"theme": "光通信", "inject_tags": ["光通信", "AI硬件", "福晶科技"]},
+    "002275": {"theme": "创新药", "inject_tags": ["创新药", "医药", "桂林三金"]},
+    "002307": {"theme": "路桥基建", "inject_tags": ["基础建设", "基建市政工程"], "zb_reason": "冲板未回封｜基础建设+基建市政工程｜炸×{open_num}"},
+    "002309": {"theme": "光伏组件", "inject_tags": ["光伏组件", "光伏", "中利集团"]},
+    "002317": {"theme": "创新药", "inject_tags": ["创新药", "医药", "众生药业"]},
+    "002353": {"theme": "燃气轮机", "inject_tags": ["燃气轮机", "燃气轮机", "杰瑞股份"]},
+    "002355": {"theme": "低空经济", "inject_tags": ["低空经济", "华为概念", "算力概念", "通信技术"]},
+    "002364": {"theme": "数据中心电源", "inject_tags": ["数据中心电源", "AI硬件", "中恒电气"]},
+    "002371": {"theme": "半导体设备", "inject_tags": ["半导体设备", "半导体", "北方华创"]},
+    "002388": {"theme": "固态电池", "inject_tags": ["固态电池", "电池产业链", "新亚制程"]},
+    "002403": {"theme": "机器人", "inject_tags": ["机器人"]},
+    "002409": {"theme": "前驱体材料", "inject_tags": ["前驱体材料", "半导体", "雅克科技"]},
+    "002420": {"theme": "人形机器人", "inject_tags": ["人形机器人", "机器人概念"]},
+    "002428": {"theme": "磷化铟长单", "inject_tags": ["磷化铟长单", "公告", "云南锗业"]},
+    "002436": {"theme": "ABF载板", "inject_tags": ["ABF载板", "PCB", "兴森科技"]},
+    "002462": {"theme": "医疗医药", "inject_tags": ["医疗医药"]},
+    "002463": {"theme": "PCB", "inject_tags": ["PCB", "PCB", "沪电股份"]},
+    "002529": {"theme": "光伏组件", "inject_tags": ["光伏组件", "光伏", "海源复材"]},
+    "002535": {"theme": "军工装备", "inject_tags": ["军工", "军工装备"]},
+    "002536": {"theme": "液冷泵", "inject_tags": ["液冷泵", "AI硬件", "飞龙股份"]},
+    "002549": {"theme": "半导体材料", "inject_tags": ["工业气体", "氦气概念", "半导体概念"]},
+    "002565": {"theme": "太空算力", "inject_tags": ["太空算力", "顺灏股份"]},
+    "002578": {"theme": "光伏边框", "inject_tags": ["光伏边框", "光伏", "闽发铝业"]},
+    "002580": {"theme": "锂电重组", "inject_tags": ["锂电重组"]},
+    "002636": {"theme": "覆铜板", "inject_tags": ["覆铜板", "PCB", "金安国纪"]},
+    "002652": {"theme": "半导体洁净室", "inject_tags": ["半导体洁净室", "半导体", "扬子新材"]},
+    "002674": {"theme": "磷化铟", "inject_tags": ["磷化铟", "AI硬件", "兴业科技"]},
+    "002716": {"theme": "黄金白银", "inject_tags": ["黄金白银", "湖南白银", "白银", "黄金"]},
+    "002741": {"theme": "PCB化学品", "inject_tags": ["PCB化学品", "PCB", "光华科技"]},
+    "002768": {"theme": "机器人", "inject_tags": ["机器人"]},
+    "002811": {"theme": "深子半导", "inject_tags": ["深子半导", "半导体", "郑中设计"]},
+    "002821": {"theme": "CDMO", "inject_tags": ["CDMO", "医药", "凯莱英"]},
+    "002827": {"theme": "重组复牌", "inject_tags": ["重组复牌", "公告", "高争民爆"]},
+    "002865": {"theme": "光伏BC", "inject_tags": ["BC电池", "光伏设备"]},
+    "002876": {"theme": "偏光片", "inject_tags": ["偏光片", "三利谱"]},
+    "002877": {"theme": "物理AI", "inject_tags": ["物理AI"]},
+    "002889": {"theme": "半导体", "inject_tags": ["半导体"]},
+    "002916": {"theme": "PCB", "inject_tags": ["PCB", "PCB", "深南电路"]},
+    "002940": {"theme": "创新药", "inject_tags": ["创新药"]},
+    "002943": {"theme": "半导体", "inject_tags": ["半导体"]},
+    "002945": {"theme": "其他", "inject_tags": ["其他", "公告"]},
+    "002971": {"theme": "六氟化钨", "inject_tags": ["六氟化钨", "电子特气", "和远气体", "AI硬件"]},
+    "002975": {"theme": "磷化铟", "inject_tags": ["磷化铟", "AI硬件", "博杰股份"]},
+    "002980": {"theme": "光模块检测", "inject_tags": ["光模块检测", "AI硬件", "华盛昌"]},
+    "002990": {"theme": "机器人", "inject_tags": ["机器人"]},
+    "002992": {"theme": "固态电池", "inject_tags": ["固态电池", "电池产业链", "宝明科技"]},
+    "003021": {"theme": "灵巧手", "inject_tags": ["灵巧手", "机器人", "兆威机电"]},
+    "003032": {"theme": "三季报增长", "inject_tags": ["三季报增长", "人工智能培训"]},
+    "003033": {"theme": "灵巧手", "inject_tags": ["灵巧手", "机器人", "征和工业"]},
+    "300006": {"theme": "抗癌药物"},
+    "300030": {"theme": "医疗器械", "inject_tags": ["医疗器械", "智慧医疗", "真空采血"]},
+    "300139": {"theme": "黄金", "inject_tags": ["黄金", "黄金", "晓程科技"]},
+    "300489": {"theme": "磷化铟", "inject_tags": ["磷化铟", "AI硬件", "光智科技"]},
+    "300666": {"theme": "靶材", "inject_tags": ["靶材", "半导体", "江丰电子"]},
+    "300788": {"theme": "AI出版", "inject_tags": ["AI出版", "AI影视传媒", "中信出版"]},
+    "300829": {"theme": "乳酸", "inject_tags": ["乳酸", "化学制品"], "zb_reason": "冲板未回封｜乳酸+化学制品｜炸×{open_num}"},
+    "300943": {"theme": "SOFC", "inject_tags": ["SOFC", "燃气轮机", "春晖智控"]},
+    "301070": {"theme": "无人驾驶AI", "inject_tags": ["无人驾驶AI", "AI硬件", "开勒股份"]},
+    "301486": {"theme": "CPO光模块", "inject_tags": ["CPO概念", "光纤概念", "消费电子零部件及组装", "通信技术"], "zb_reason": "CPO+光纤概念+消费电子零部件｜冲板未回封｜炸×{open_num}"},
+    "301520": {"theme": "创新药", "inject_tags": ["创新药", "CRO"]},
+    "301583": {"theme": "次新股", "inject_tags": ["次新股", "次新", "托伦斯"]},
+    "301658": {"theme": "光伏", "inject_tags": ["光伏"]},
+    "301697": {"theme": "次新股", "inject_tags": ["次新股", "次新", "贝特利"]},
+    "600113": {"theme": "商贸零售", "inject_tags": ["商贸零售", "农批市场"]},
+    "600137": {"theme": "消费", "inject_tags": ["消费"]},
+    "600172": {"theme": "基建", "inject_tags": ["基建"]},
+    "600189": {"theme": "矿泉水", "inject_tags": ["矿泉水"]},
+    "600206": {"theme": "靶材", "inject_tags": ["靶材", "半导体", "有研新材"]},
+    "600215": {"theme": "工业机器人", "inject_tags": ["工业机器人", "仿生机器人"]},
+    "600252": {"theme": "中药创新药"},
+    "600261": {"theme": "商业航天", "inject_tags": ["商业航天", "激光通信"]},
+    "600293": {"theme": "锂电重组", "inject_tags": ["重大重组", "锂电电解液"]},
+    "600319": {"theme": "氯聚合物", "inject_tags": ["氯聚合物", "氯碱", "CPE"]},
+    "600327": {"theme": "消费", "inject_tags": ["消费"]},
+    "600371": {"theme": "玉米种业", "inject_tags": ["玉米种业", "万向德农"]},
+    "600391": {"theme": "燃气轮机", "inject_tags": ["燃气轮机", "燃气轮机", "航发科技"]},
+    "600510": {"theme": "牛仔布", "inject_tags": ["牛仔布", "新型城镇化"]},
+    "600547": {"theme": "黄金", "inject_tags": ["黄金", "黄金", "山东黄金"]},
+    "600584": {"theme": "先进封装", "inject_tags": ["先进封装", "半导体", "长电科技"]},
+    "600605": {"theme": "半导体", "inject_tags": ["半导体"]},
+    "600641": {"theme": "SOFC", "inject_tags": ["SOFC", "燃气轮机", "先导基电"]},
+    "600699": {"theme": "人形机器人", "inject_tags": ["人形机器人", "机器人", "均胜电子"]},
+    "600715": {"theme": "AI影视/传媒", "inject_tags": ["AI影视/传媒"]},
+    "600721": {"theme": "医药外包", "inject_tags": ["医药外包", "复杂制剂"]},
+    "600802": {"theme": "水泥基建"},
+    "600838": {"theme": "商贸零售", "inject_tags": ["商贸零售", "商业地产"]},
+    "600892": {"theme": "短剧", "inject_tags": ["短剧", "AI影视传媒", "大晟文化"]},
+    "600988": {"theme": "黄金", "inject_tags": ["黄金", "黄金", "赤峰黄金"]},
+    "601069": {"theme": "黄金", "inject_tags": ["黄金", "黄金", "西部黄金"]},
+    "601123": {"theme": "次新股", "inject_tags": ["次新股", "次新", "马矿股份"]},
+    "601208": {"theme": "高速树脂", "inject_tags": ["高速树脂", "PCB", "东材科技"]},
+    "601212": {"theme": "黄金", "inject_tags": ["黄金", "黄金", "白银有色"]},
+    "601222": {"theme": "低空经济", "inject_tags": ["低空经济"]},
+    "601566": {"theme": "消费", "inject_tags": ["消费", "海峡两岸", "对台贸易"]},
+    "601599": {"theme": "AI影视", "inject_tags": ["AI影视", "AI影视传媒", "浙文影业"]},
+    "603048": {"theme": "冷锻工艺", "inject_tags": ["冷锻工艺", "机器人", "浙江黎明"]},
+    "603058": {"theme": "半导体", "inject_tags": ["半导体", "半导体概念", "包装印刷"]},
+    "603061": {"theme": "芯片测试设备", "inject_tags": ["芯片测试设备", "半导体", "金海通"]},
+    "603067": {"theme": "军工装备", "inject_tags": ["军工装备"]},
+    "603068": {"theme": "半导体", "inject_tags": ["半导体"]},
+    "603115": {"theme": "电极箔", "inject_tags": ["电极箔", "PCB", "海星股份"]},
+    "603127": {"theme": "CRO", "inject_tags": ["CRO", "医药", "昭衍新药"]},
+    "603131": {"theme": "商业航天", "inject_tags": ["商业航天", "商业卫星"]},
+    "603186": {"theme": "ABF膜", "inject_tags": ["ABF膜", "PCB", "华正新材"], "zb_reason": "冲板未回封｜PCB+半导体概念+印制电路板｜炸×{open_num}"},
+    "603200": {"theme": "固态电池", "inject_tags": ["固态电池", "数据中心液冷"]},
+    "603203": {"theme": "半导体封装", "inject_tags": ["半导体封装", "半导体", "快克智能"]},
+    "603248": {"theme": "次新股", "inject_tags": ["次新股", "次新", "锡华科技"]},
+    "603256": {"theme": "电子布", "inject_tags": ["电子布", "PCB", "宏和科技"]},
+    "603259": {"theme": "创新药", "inject_tags": ["创新药", "医药", "药明康德"]},
+    "603273": {"theme": "机器人", "inject_tags": ["机器人", "工业机器人", "机器人集成"]},
+    "603283": {"theme": "半导体测试设备", "inject_tags": ["半导体测试设备", "半导体", "赛腾股份"]},
+    "603330": {"theme": "电子膜", "inject_tags": ["电子膜", "CPO概念"], "zb_reason": "冲板未回封｜电子膜+CPO概念｜炸×{open_num}"},
+    "603332": {"theme": "涤纶长丝", "inject_tags": ["差别化涤纶长丝", "涤纶"]},
+    "603337": {"theme": "机器人", "inject_tags": ["机器人"]},
+    "603351": {"theme": "化学制药", "inject_tags": ["化学制药"]},
+    "603381": {"theme": "光伏边框", "inject_tags": ["光伏边框", "光伏", "永臻股份"]},
+    "603598": {"theme": "AI短剧", "inject_tags": ["AI短剧", "AI影视传媒", "引力传媒"]},
+    "603600": {"theme": "商贸零售", "inject_tags": ["家居用品", "跨境电商"], "zb_reason": "冲板未回封｜家居用品+跨境电商｜炸×{open_num}"},
+    "603629": {"theme": "词元算力"},
+    "603657": {"theme": "具身机器人", "inject_tags": ["具身机器人", "机器人", "春光科技"]},
+    "603662": {"theme": "人形机器人", "inject_tags": ["人形机器人", "机器人", "柯力传感"]},
+    "603696": {"theme": "对台贸易", "inject_tags": ["对台贸易"]},
+    "603703": {"theme": "卫星通信", "inject_tags": ["卫星通信"]},
+    "603721": {"theme": "数据要素", "inject_tags": ["数据要素"]},
+    "603767": {"theme": "机器人减速器", "inject_tags": ["机器人减速器", "机器人", "中马传动"]},
+    "603773": {"theme": "玻璃基板", "inject_tags": ["玻璃基板", "AI硬件", "沃格光电"]},
+    "603777": {"theme": "休闲食品", "inject_tags": ["休闲食品", "消费", "来伊份"]},
+    "603838": {"theme": "商贸零售", "inject_tags": ["商贸零售", "家居用品"]},
+    "603893": {"theme": "端侧AI芯片", "inject_tags": ["端侧AI芯片", "半导体", "瑞芯微"]},
+    "603950": {"theme": "燃气轮机", "inject_tags": ["燃气轮机", "燃气轮机", "长源东谷"]},
+    "603955": {"theme": "羽毛球机器人", "inject_tags": ["羽毛球机器人", "机器人", "大千生态"]},
+    "605058": {"theme": "PCB", "inject_tags": ["PCB", "HDI板", "AI服务器"]},
+    "605111": {"theme": "功率半导体", "inject_tags": ["功率半导体", "半导体", "新洁能"]},
+    "605258": {"theme": "PCB", "inject_tags": ["PCB"]},
+    "605287": {"theme": "AI漫剧", "inject_tags": ["AI漫剧", "AI影视传媒", "德才股份"]},
+    "605288": {"theme": "机器人零部件", "inject_tags": ["机器人零部件", "机器人", "凯迪股份"]},
+    "605338": {"theme": "中式面点", "inject_tags": ["中式面点", "小笼包"]},
+    "605358": {"theme": "机器人", "inject_tags": ["机器人"]},
+    "605376": {"theme": "MLCC镍粉", "inject_tags": ["MLCC镍粉", "AI硬件", "博迁新材"]},
+    "605488": {"theme": "物理AI手套", "inject_tags": ["物理AI手套", "机器人", "福莱新材"]},
+    "605577": {"theme": "AI漫剧", "inject_tags": ["AI漫剧", "AI影视传媒", "龙版传媒"]},
+    "688037": {"theme": "涂胶显影设备", "inject_tags": ["涂胶显影设备", "半导体", "芯源微"]},
+    "688045": {"theme": "三季报增长", "inject_tags": ["三季报扭亏", "数字电源"]},
+    "688072": {"theme": "薄膜沉积设备", "inject_tags": ["薄膜沉积设备", "半导体", "拓荆科技"]},
+    "688082": {"theme": "半导体", "inject_tags": ["半导体"]},
+    "688200": {"theme": "半导体测试设备", "inject_tags": ["半导体测试设备", "半导体", "华峰测控"]},
+    "688361": {"theme": "半导体量检测", "inject_tags": ["半导体量检测", "半导体", "中科飞测"]},
+    "688409": {"theme": "半导体零部件", "inject_tags": ["半导体零部件", "半导体", "富创精密"]},
+    "688507": {"theme": "物理AI", "inject_tags": ["物理AI", "物理AI", "索辰科技"]},
+    "688517": {"theme": "光储充", "inject_tags": ["光储充", "光伏", "金冠电气"]},
+    "688536": {"theme": "模拟芯片", "inject_tags": ["模拟芯片", "半导体", "思瑞浦"]},
+    "688596": {"theme": "电子特气", "inject_tags": ["电子特气", "半导体", "正帆科技"]},
+    "688627": {"theme": "半导体设备", "inject_tags": ["半导体设备"]},
+    "688652": {"theme": "半导体设备", "inject_tags": ["半导体设备", "半导体", "京仪装备"]},
+    "688809": {"theme": "半导体探针卡", "inject_tags": ["半导体探针卡", "半导体", "强一股份"]},
+    "688835": {"theme": "次新股", "inject_tags": ["次新股", "次新", "高凯技术"]},
+    "920298": {"theme": "次新股", "inject_tags": ["次新股", "次新", "腾信精密"]},
+    "920770": {"theme": "光伏电站", "inject_tags": ["光伏电站", "光伏", "艾能聚"]},
 }
+
+# 2026-11-17 韭研 code→大列 覆盖（简图确认）
+_JIUYAN_OV = Path("/workspace/jiuyan/2026-11-18-code-overrides.json")
+if _JIUYAN_OV.is_file():
+    try:
+        _ext = json.loads(_JIUYAN_OV.read_text(encoding="utf-8"))
+        for _code, _ov in _ext.items():
+            if not isinstance(_ov, dict) or "theme" not in _ov:
+                continue
+            _merged = dict(CODE_OVERRIDES.get(_code) or {})
+            _merged["theme"] = _ov["theme"]
+            if _ov.get("inject_tags"):
+                _merged["inject_tags"] = list(_ov["inject_tags"])
+            if _ov.get("zb_reason"):
+                _merged["zb_reason"] = _ov["zb_reason"]
+            if _ov.get("zt_reason"):
+                _merged["zt_reason"] = _ov["zt_reason"]
+            if _ov.get("high_days"):
+                _merged["high_days"] = _ov["high_days"]
+            if _ov.get("_fine"):
+                _merged["sub_logic"] = _ov["_fine"]
+            elif _ov.get("sub_logic"):
+                _merged["sub_logic"] = _ov["sub_logic"]
+            CODE_OVERRIDES[_code] = _merged
+        print(f"[jiuyan] loaded {len(_ext)} code overrides from {_JIUYAN_OV}")
+    except Exception as _e:  # pragma: no cover
+        print(f"[jiuyan] override load failed: {_e}")
 
 # Matchers: tag substring / synonym → logic. More specific first within each group.
 TAG_TO_LOGIC = [
@@ -225,7 +430,31 @@ TAG_TO_LOGIC = [
     ("AI智能体", ["AI智能体", "DeepSeek概念", "智谱AI概念"]),
     ("光模块材料", ["光模块胶", "电子胶"]),
     ("CPO光模块", ["CPO概念", "CPO", "光纤概念"]),
-    ("卫星通信", ["卫星通信", "SpaceX", "卫星互联网", "商业航天"]),
+    ("商业航天", ["商业航天", "异轨激光", "激光通信"]),
+    ("卫星通信", ["卫星通信", "SpaceX", "卫星互联网", "卫星通信终端"]),
+    ("脑机接口", ["脑机接口"]),
+    ("医疗器械", ["医疗器械", "真空采血", "智慧医疗"]),
+    ("医药外包", ["医药外包", "CRO"]),
+    ("白酒", ["白酒", "老窖池", "徽酒"]),
+    ("矿泉水", ["矿泉水"]),
+    ("中式面点", ["中式面点", "小笼包"]),
+    ("水产品", ["水产品", "海参养殖"]),
+    ("休闲食品", ["休闲食品", "饼干食品", "黑色食养"]),
+    ("青啤拟入主", ["青啤拟入主"]),
+    ("中期分红", ["中期分红"]),
+    ("覆铜板", ["覆铜板", "CCL", "电子级玻纤"]),
+    ("PCB", ["PCB", "HDI板", "印制电路板"]),
+    ("AI硬件", ["AI硬件", "AI服务器"]),
+    ("电子膜", ["电子膜"]),
+    ("三季报增长", [
+        "三季报增长", "三季报大增", "三季报高增", "三季报净利增长",
+        "三季报扭亏", "三季报增", "三季报落地", "三季度净利增", "业绩环增",
+    ]),
+    ("固态电池", ["固态电池"]),
+    ("陶瓷纤维", ["陶瓷纤维"]),
+    ("农药", ["百草枯", "农药"]),
+    ("牛仔布", ["牛仔布"]),
+    ("乳酸", ["乳酸"]),
     ("益生菌", ["益生菌食品", "益生菌出海", "菌株研发", "益生菌"]),
     ("生猪养殖", ["生猪养殖", "供港活猪"]),
     ("中药创新药", ["中药创新药", "医药制造"]),
@@ -258,13 +487,19 @@ CONCEPT_TO_LOGIC = [
     ("飞行汽车", ["飞行汽车", "eVTOL"]),
     ("数据要素", ["数据要素", "财税数字化"]),
     ("AI智能体", ["AI智能体", "DeepSeek概念"]),
-    ("半导体材料", ["工业气体", "氦气概念", "光刻机", "半导体概念", "PCB", "印制电路板"]),
+    ("半导体材料", ["工业气体", "氦气概念", "光刻机", "半导体概念"]),
     ("光伏BC", ["BC电池"]),
     ("对台贸易", ["对台贸易", "海峡两岸"]),
     ("MLCC", ["MLCC"]),
     ("军工装备", ["军工"]),
     ("油气装备", ["油气"]),
-    ("卫星通信", ["卫星通信", "卫星互联网", "商业航天", "SpaceX"]),
+    ("商业航天", ["商业航天", "异轨激光", "激光通信"]),
+    ("卫星通信", ["卫星通信", "卫星互联网", "SpaceX"]),
+    ("PCB", ["PCB", "印制电路板", "HDI"]),
+    ("覆铜板", ["覆铜板", "CCL"]),
+    ("脑机接口", ["脑机接口"]),
+    ("医疗器械", ["医疗器械"]),
+    ("医药外包", ["医药外包", "CRO"]),
     ("词元算力", ["算力概念", "英伟达概念"]),
     ("氯聚合物", ["氯碱"]),
     ("涤纶长丝", ["涤纶"]),
@@ -281,14 +516,26 @@ CONCEPT_TO_LOGIC = [
 # Fallback keyword rules on name/hybk/reason text for zb or unmatched
 # Banned: 大消费 / broad 消费零售 / 先进材料 paste-buckets
 FALLBACK_KW = [
-    ("羊字辈", ["羊"]),
+    ("商业航天", ["商业航天", "激光通信"]),
+    ("卫星通信", ["盛洋", "卫星通信", "卫星"]),
+    ("脑机接口", ["脑机接口"]),
+    ("医疗器械", ["医疗器械", "采血"]),
+    ("白酒", ["白酒"]),
+    ("矿泉水", ["矿泉水"]),
+    ("中式面点", ["中式面点", "小笼包"]),
+    ("水产品", ["海参", "水产品"]),
+    ("覆铜板", ["覆铜板"]),
+    ("PCB", ["PCB", "HDI"]),
+    ("三季报增长", ["三季报", "业绩环增"]),
+    ("固态电池", ["固态电池"]),
+    ("陶瓷纤维", ["陶瓷纤维"]),
+    ("农药", ["百草枯", "农药"]),
     ("中药创新药", ["中药"]),
     ("抗癌药物", ["抗癌"]),
     ("创新药", ["创新药"]),
     ("化学制药", ["化学制药", "制药", "药业"]),
     ("生物医药", ["生物医药", "生物制品"]),
     ("数据要素", ["数据", "软件", "税友", "银海", "财税", "IT服务"]),
-    ("卫星通信", ["盛洋", "卫星", "航天"]),
     ("词元算力", ["算力", "词元", "Token", "数据中心"]),
     ("短剧传媒", ["传媒", "短剧", "出版", "影视", "广电"]),
     ("人形机器人", ["人形"]),
@@ -308,6 +555,8 @@ FALLBACK_KW = [
     ("数字能源", ["电力", "空调", "能源"]),
     ("氯聚合物", ["氯碱", "CPE"]),
     ("涤纶长丝", ["涤纶", "化纤"]),
+    # 羊字辈最后：仅字辈情绪、无产业关键词时才命中
+    ("羊字辈", ["“羊”字辈", "羊字辈"]),
 ]
 
 
@@ -383,13 +632,17 @@ def plate_of(code: str) -> str:
         return "创业"
     if c.startswith(("8", "4")) and len(c) == 6:
         return "北证"
+    if c.startswith("92") and len(c) == 6:
+        return "北证"
     return "主板"
 
 
 def secid_of(code: str) -> str:
     """Eastmoney secid: 沪市 1.xxxxxx，深市/北证 0.xxxxxx."""
     c = str(code or "").strip()
-    if c.startswith(("5", "6", "9")) or c.startswith("688"):
+    if c.startswith("92") and len(c) == 6:
+        return f"0.{c}"
+    if c.startswith(("5", "6")) or c.startswith("900") or c.startswith("688"):
         return f"1.{c}"
     return f"0.{c}"
 
@@ -651,6 +904,8 @@ def card_em_html(r: dict) -> str:
             lr = r.get("last") or ""
         if lr:
             parts.append(f"回{lr[:5]}")
+        if r["seal"] < WEAK_SEAL:
+            parts.append("弱")
         return f'<em class="r">{html_esc(" ".join(parts))}</em>'
     wk = r["seal"] < WEAK_SEAL
     if wk:
@@ -704,12 +959,16 @@ def fallback_logic(text: str) -> str:
 def specificity_rank(logic: str) -> int:
     """Higher = more specific."""
     order = [
-        "羊字辈", "飞行汽车", "低空经济", "人形机器人", "端侧AI", "CPO光模块",
-        "光模块材料", "卫星通信", "益生菌", "生猪养殖", "AI智能体", "AI设计",
+        "飞行汽车", "低空经济", "人形机器人", "端侧AI", "CPO光模块",
+        "光模块材料", "商业航天", "卫星通信", "异轨激光", "脑机接口", "医疗器械",
+        "白酒", "矿泉水", "中式面点", "水产品", "休闲食品", "青啤拟入主",
+        "益生菌", "生猪养殖", "AI智能体", "AI设计", "覆铜板", "PCB", "AI硬件", "电子膜",
         "MLCC", "锂电重组", "光伏BC", "半导体材料", "涤纶长丝", "氯聚合物",
         "对台贸易", "油气装备", "军工装备", "词元算力", "短剧传媒", "数据要素",
         "工业机器人", "安防AI", "中药创新药", "抗癌药物", "化学制药", "生物医药",
-        "创新药", "商贸零售", "数字能源", "水泥基建", "盾构风电",
+        "创新药", "医药外包", "商贸零售", "中期分红", "数字能源", "水泥基建", "盾构风电",
+        "固态电池", "陶瓷纤维", "农药", "牛仔布", "乳酸",
+        "三季报增长", "羊字辈",
     ]
     try:
         return len(order) - order.index(logic)
@@ -753,12 +1012,18 @@ def match_logic_from_concepts(board_names: list[str]) -> tuple[str | None, list[
 FORBIDDEN_LABEL_FRAGMENTS = (
     "大消费",
     "独立逻辑",
+    "其他",
     "同题材接力·其他",
     "同题材接力·大消费",
     "同题材接力·消费",
     "同题材接力·医药",
     "同题材接力·基建",
+    "同题材接力·商业航天",
+    "同题材接力·AI硬件",
+    "同题材接力·机器人",
+    "同题材接力·三季报",
     "同题材接力·行业",
+    # 仅禁大列糊名接力；勿加「机器人接力」等后缀，否则会误伤「工业机器人接力」
     "消费接力",
     "医药接力",
     "基建接力",
@@ -899,9 +1164,44 @@ def assign_logic(
     if "短剧传媒" in cands and any(t in ("广电网络", "微短剧", "AI漫剧", "AI短剧", "出版发行") for t in tags):
         return "短剧传媒"
 
-    # 羊字辈：今日高频情绪逻辑；仅让位给已硬覆盖的光模块/飞行/卫星等
+    # 商业航天 / 卫星（优先于羊字辈与三季报）
+    if any("商业航天" in t or "激光通信" in t or "异轨激光" in t for t in tags):
+        if "商业航天" in cands:
+            return "商业航天"
+        if "卫星通信" in cands:
+            return "卫星通信"
+    if any("卫星通信" in t or t == "SpaceX" or "卫星通信终端" in t for t in tags) and "卫星通信" in cands:
+        return "卫星通信"
+    # 医药细逻辑（含脑机/器械）优先于羊字辈
+    if any("脑机接口" in t for t in tags) and "脑机接口" in cands:
+        return "脑机接口"
+    if any("医疗器械" in t or "真空采血" in t or "智慧医疗" in t for t in tags) and "医疗器械" in cands:
+        return "医疗器械"
+    if any("医药外包" in t or t == "CRO" for t in tags) and "医药外包" in cands:
+        return "医药外包"
+    # 消费细逻辑
+    if any("白酒" in t or "老窖池" in t for t in tags) and "白酒" in cands:
+        return "白酒"
+    if any("矿泉水" in t for t in tags) and "矿泉水" in cands:
+        return "矿泉水"
+    if any("中式面点" in t or "小笼包" in t for t in tags) and "中式面点" in cands:
+        return "中式面点"
+    if any("海参养殖" in t or "水产品" in t for t in tags) and "水产品" in cands:
+        return "水产品"
+    # AI硬件
+    if any("覆铜板" in t or t == "CCL" for t in tags) and "覆铜板" in cands:
+        return "覆铜板"
+    if any(t == "PCB" or "HDI" in t or "印制电路板" in t for t in tags) and "PCB" in cands:
+        return "PCB"
+    if any("AI服务器" in t or t == "AI硬件" for t in tags) and "AI硬件" in cands:
+        return "AI硬件"
+
+    # 羊字辈降级：仅当无其它产业候选时才成列；有主线则羊只留 reason/关键词
     if "羊字辈" in cands and any("羊" in t and "字" in t for t in tags):
-        return "羊字辈"
+        others = [c for c in cands if c != "羊字辈"]
+        if not others:
+            return "羊字辈"
+        cands = others
 
     # 数据要素 vs 具身：有明确数据要素/数据库标签且无具身/人形时，归数据要素
     if "数据要素" in cands and any(t in ("数据要素", "数据库", "数字财税") for t in tags):
@@ -1004,15 +1304,22 @@ def apply_code_override(rec: dict) -> None:
     if not ov:
         return
     rec["theme"] = ov["theme"]
+    if ov.get("sub_logic"):
+        rec["sub_logic"] = ov["sub_logic"]
+    if ov.get("high_days"):
+        rec["high_days"] = ov["high_days"]
+        board, hd = board_from_high_days(ov["high_days"])
+        rec["board"] = board
+        rec["high_days"] = hd
+        # keep card reason board-label in sync
+        parts = (rec.get("reason") or "").split("｜")
+        if len(parts) >= 2:
+            parts[1] = hd
+            rec["reason"] = "｜".join(parts)
     inject = list(ov.get("inject_tags") or [])
     if inject:
-        seen = set()
-        merged = []
-        for t in inject + list(rec.get("tags") or []):
-            if t and t not in seen:
-                seen.add(t)
-                merged.append(t)
-        rec["tags"] = merged
+        # 韭研简图关键词为准，避免同花顺误标（如阳字辈写成羊字辈）造成伪串线
+        rec["tags"] = [t for t in inject if t]
     if rec["status"] == "zb" and ov.get("zb_reason"):
         rec["reason"] = ov["zb_reason"].format(open_num=rec.get("open_num") or 1)
         if "｜" in rec["reason"]:
@@ -1026,6 +1333,16 @@ def apply_code_override(rec: dict) -> None:
         rec["reason"] = f"冲板未回封｜{syn}｜炸×{open_num}"
     elif rec["status"] == "zt" and ov.get("zt_reason"):
         rec["reason"] = ov["zt_reason"]
+        if "｜" in rec["reason"]:
+            rec["reason_type"] = rec["reason"].split("｜")[0]
+    elif rec["status"] == "zt" and inject:
+        syn = "+".join(inject)
+        rec["reason_type"] = syn
+        rest = rec.get("reason") or ""
+        if "｜" in rest:
+            rec["reason"] = syn + "｜" + "｜".join(rest.split("｜")[1:])
+        else:
+            rec["reason"] = syn
 
 
 def build_records(date_compact: str, block_map: dict) -> list[dict]:
@@ -1213,8 +1530,8 @@ def shared_tags(a: dict, b: dict) -> list[str]:
 def chain_within_logic(recs: list[dict]) -> None:
     """Yellow/orange chain within visual columns, but only same sub_logic.
 
-    Bucket columns (消费/医药/基建) must NOT paste-chain across different
-    sub_logics (e.g. 生猪养殖 ↔ 对台贸易).
+    Bucket columns (消费/医药/商业航天/AI硬件/机器人/三季报/基建) must NOT
+    paste-chain across different sub_logics (e.g. 生猪养殖 ↔ 对台贸易).
     """
     by_theme = defaultdict(list)
     for r in recs:
@@ -1446,7 +1763,7 @@ def render_html(date: str, recs: list[dict], edges: list[list]) -> tuple[str, in
             grid[b][th].sort(key=lambda x: (x["first"], 0 if x["status"] == "zt" else 1, x["code"]))
 
     leg = "".join(
-        f'<span class="lg"><i style="background:{bg}"></i>{th}{theme_counts[th]}</span>'
+        f'<span class="lg"><i style="background:{bg}"></i>{th} {theme_counts[th]}</span>'
         for th, bg, fg in themes_present
     )
     plate_counts = Counter(r.get("plate") or plate_of(r["code"]) for r in recs)
@@ -1472,7 +1789,7 @@ def render_html(date: str, recs: list[dict], edges: list[list]) -> tuple[str, in
         for th, bg, fg in themes_present:
             parts = []
             for r in grid[b].get(th, []):
-                wk = r["status"] == "zt" and r["seal"] < WEAK_SEAL and int(r.get("open_num") or 0) == 0
+                wk = r["status"] == "zt" and r["seal"] < WEAK_SEAL
                 cls = "c zb" if r["status"] == "zb" else "c zt"
                 if wk:
                     cls += " wk"
@@ -1520,70 +1837,13 @@ def render_html(date: str, recs: list[dict], edges: list[list]) -> tuple[str, in
 
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>{date} 涨停时间轴（指向相关标的）</title>
+<title>{date} 涨停时间轴</title>
 <style>
-:root{{--bg:#000;--panel:#0a0a0a;--text:#fff;--muted:#bbb;--line:#333}}
-*{{box-sizing:border-box}}
-html,body{{margin:0;height:100%;background:#000;color:#fff;font:12px/1.35 "Segoe UI",system-ui,sans-serif}}
-.page{{height:100vh;display:grid;grid-template-rows:auto 1fr;position:relative}}
-.head{{padding:8px 12px;background:#111;border-bottom:2px solid #fff}}
-h1{{margin:0;font-size:16px;color:#fff}}
-.sub{{color:#ccc;font-size:11px;margin:3px 0}}
-.leg{{display:flex;flex-wrap:wrap;gap:6px 12px}}
-.lg{{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#eee;font-weight:600}}
-.lg i{{width:12px;height:12px;border-radius:2px;border:1px solid #fff}}
-.key{{font-size:11px;color:#ddd;margin-top:4px}}
-.wrap{{overflow:auto;padding:8px;min-height:0;position:relative;background:#000;cursor:grab}}
-.wrap.is-panning{{cursor:grabbing;user-select:none;-webkit-user-select:none}}
-.wrap.is-panning *{{cursor:grabbing!important}}
-#stage{{position:relative;display:inline-block;min-width:100%}}
-table{{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;background:#111;position:relative;z-index:1}}
-th,td{{border:1px solid #444;padding:4px;vertical-align:top}}
-th{{background:#1a1a1a;color:#fff;position:sticky;top:0;z-index:3;font-size:11px;min-width:120px;max-width:160px;border-bottom:2px solid #fff}}
-th .arr{{display:block;font-weight:500;color:#ff0;font-size:10px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
-td.tm{{position:sticky;left:0;background:#222;color:#0f0;font-weight:800;z-index:2;white-space:nowrap;min-width:48px;border-right:2px solid #0f0}}
-.c{{display:flex;align-items:center;gap:4px;width:100%;margin:0 0 4px;padding:5px 6px;border-radius:4px;border:2px solid #000;background:var(--bg);color:var(--fg);cursor:pointer;font:inherit;font-weight:700}}
-.c b{{flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:inherit}}
-.c i{{font-style:normal;font-size:10px;background:#000;color:#ff0;padding:0 3px;border-radius:2px}}
-.c .plate{{font-style:normal;font-size:10px;font-weight:900;padding:1px 4px;border-radius:3px;border:1px solid #fff;letter-spacing:.02em;flex-shrink:0}}
-.c .plate-main{{background:#1565c0;color:#fff}}
-.c .plate-cy{{background:#ff6d00;color:#000}}
-.c .plate-kc{{background:#aa00ff;color:#fff}}
-.c .plate-bj{{background:#546e7a;color:#fff}}
-.plate-leg{{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:4px}}
-.plate-leg .pl{{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#eee}}
-.plate-leg .pl span{{font-size:10px;font-weight:900;padding:1px 5px;border-radius:3px;border:1px solid #fff}}
-.plate-leg .pl .plate-main{{background:#1565c0;color:#fff}}
-.plate-leg .pl .plate-cy{{background:#ff6d00;color:#000}}
-.plate-leg .pl .plate-kc{{background:#aa00ff;color:#fff}}
-.plate-leg .pl .plate-bj{{background:#546e7a;color:#fff}}
-.c.zt{{border-style:solid;border-width:2px;border-color:#000;box-shadow:0 0 0 1px rgba(255,255,255,.35)}}
-.c.zb{{border-style:dashed;border-width:3px;border-color:#ff9100;box-shadow:0 0 0 1px #ffea00,inset 0 0 0 1px rgba(255,145,0,.35);filter:saturate(.9);opacity:1;background-image:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,145,0,.06) 2px,rgba(255,145,0,.06) 4px)}}
-.c.wk{{outline:3px solid #ff0;outline-offset:1px}}
-.c.mk{{padding:2px 5px;margin:0 0 3px;font-size:10px;font-weight:800;width:auto;gap:2px;align-items:center}}
-.c.mk b{{font-size:10px;flex:1;text-align:left}}
-.c.zb-mk{{border-style:dashed;border-width:2px;border-color:#ff9100;background:#3d2800;color:#ffea00;box-shadow:0 0 0 1px #ffea00,inset 0 0 0 1px rgba(255,145,0,.35)}}
-.c.hf-mk{{border-style:solid;border-width:2px;border-color:#00e676;background:#003d1f;color:#b9f6ca;box-shadow:0 0 0 1px #69f0ae}}
-.c em{{font-style:normal;font-size:10px;background:#000;color:#fff;padding:0 3px;border-radius:2px}}
-.c em.r{{background:#ff0;color:#000;font-weight:900}}
-.c:hover{{filter:brightness(1.15);z-index:5}}
-#arrows{{position:absolute;left:0;top:0;pointer-events:none;z-index:4;overflow:visible}}
-.mask{{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:40;padding:16px}}
-.mask.on{{display:flex}}
-.dlg{{width:min(440px,100%);background:#1a1a1a;border:2px solid #fff;border-radius:8px;padding:14px}}
-.dlg h2{{margin:0 0 4px;font-size:15px;color:#fff}}
-.dlg .meta{{color:#ff0;font-size:11px;margin-bottom:8px}}
-.dlg .logic{{background:#000;border:1px solid #555;border-radius:6px;padding:10px;line-height:1.55;white-space:pre-wrap;color:#eee}}
-.dlg button{{margin-top:10px;width:100%;padding:8px;border:0;border-radius:6px;background:#ff0;color:#000;font-weight:800;cursor:pointer}}
-
-.edge-lab{{font:10px/1.2 "Segoe UI",system-ui,sans-serif;fill:#fff;paint-order:stroke;stroke:#000;stroke-width:3px;stroke-linejoin:round;pointer-events:none}}
+{DAY_CSS}
 </style></head><body>
 <div class="page">
 <div class="head">
-<h1>{date} 涨停时间轴 · 按涨停逻辑分列</h1>
-<div class="sub">封板{zt_n} · 炸板{zb_n} · 弱封单{wk_n} · 涨停实心边框 · 炸板橙黄虚线框 · 同列逻辑接力（黄实线）· 炸板关联（橙虚线）· 跨列共享逻辑（青实线）· 线上标注原因 · 数据：同花顺封板池 reason_type + 东财封单/时间/分时推演</div>
-<div class="leg">{leg} · 板别 {plate_leg}</div>
-<div class="key">卡片边框：<b style="color:#fff">涨停实心</b> · <b style="color:#ff9100">炸板虚线</b>（橙黄虚线框）· 黄框=弱封单(&lt;3000万) · <b style="color:#ff9100">炸</b>/<b style="color:#69f0ae">回</b>=分时推演的炸板与回封标记（同列小标）· 悬停高亮相关线 · 点击看 reason_type｜高位｜板型｜板别 · 每条线中段有原因标签 · 蓝徽=主板 · 橙徽=创业 · 紫徽=科创 · <b>按住拖动平移</b></div>
+{head_html(date, zt_n, zb_n, wk_n, leg, plate_leg)}
 </div>
 <div class="wrap" id="wrap">
 <div id="stage">
@@ -1605,6 +1865,7 @@ td.tm{{position:sticky;left:0;background:#222;color:#0f0;font-weight:800;z-index
 </tbody></table>
 </div>
 </div>
+{FOOT_HTML}
 </div>
 <div class="mask" id="mask"><div class="dlg">
 <h2 id="p-name"></h2><div class="meta" id="p-meta"></div><div class="logic" id="p-logic"></div>
@@ -1766,7 +2027,7 @@ setTimeout(()=>draw(null), 100);
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--date", default="2026-10-21", help="YYYY-MM-DD")
+    ap.add_argument("--date", default="2026-11-18", help="YYYY-MM-DD")
     args = ap.parse_args()
     date = args.date
     date_compact = date.replace("-", "")
@@ -1847,7 +2108,7 @@ def main():
         )
     pc = Counter(r.get("plate") or plate_of(r["code"]) for r in recs)
     print("plates", dict(pc))
-    print(f"summary 炸板{zb_n} · 弱封单{wk_n} · 封板{zt_n} · 逻辑列复盘（消费/医药/基建大列归并）")
+    print(f"summary 炸板{zb_n} · 弱封单{wk_n} · 封板{zt_n} · 逻辑列复盘（2026-11-18韭研：国产算力/AI硬件/家电/机器人/光刻机（胶）/其他）")
 
 
 if __name__ == "__main__":
